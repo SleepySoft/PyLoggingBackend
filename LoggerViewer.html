@@ -711,6 +711,7 @@
             setupScrollObserver();
             setupScrollToBottom();
             initHeaderEditor();
+            setupDragAndDrop();
             setInterval(updateStats, 30000);
         });
 
@@ -1415,80 +1416,68 @@
             const columnList = document.getElementById('columnList');
             columnList.innerHTML = '';
 
-            // 对列按照当前顺序排序
-            const orderedColumns = [...availableColumns].sort((a, b) => {
-                return columnOrder.indexOf(a) - columnOrder.indexOf(b);
-            });
-
-            orderedColumns.forEach(column => {
+            columnOrder.forEach(column => {
                 const isChecked = visibleColumns.includes(column);
-
-                const columnItem = document.createElement('div');
-                columnItem.className = 'column-item';
-                columnItem.dataset.column = column;
-                columnItem.draggable = true;
-
-                columnItem.innerHTML = `
+                const div = document.createElement('div');
+                div.className = 'column-item';
+                div.dataset.column = column;
+                div.draggable = true;
+                div.innerHTML = `
                     <span class="column-handle"><i class="fas fa-grip-vertical"></i></span>
                     <input type="checkbox" class="column-checkbox" id="col-${column}"
                            ${isChecked ? 'checked' : ''}>
                     <label for="col-${column}">${column}</label>
                 `;
-
-                columnList.appendChild(columnItem);
+                columnList.appendChild(div);
             });
-
-            // 设置拖拽事件
-            setupDragAndDrop();
         }
 
         // 设置拖拽排序功能
         function setupDragAndDrop() {
             const columnList = document.getElementById('columnList');
 
-            let dragSrcElement = null;
-
-            // 拖拽开始事件
-            columnList.addEventListener('dragstart', function(e) {
-                if (e.target.classList.contains('column-item')) {
-                    dragSrcElement = e.target;
-                    e.target.classList.add('dragging');
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', e.target.dataset.column);
-                }
+            // 委托事件，列表项是动态生成的没关系
+            columnList.addEventListener('dragstart', e => {
+                const item = e.target.closest('.column-item');
+                if (!item) return;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', item.dataset.column); // 只传列名
+                item.classList.add('dragging');
             });
 
-            // 拖拽结束事件
-            columnList.addEventListener('dragend', function(e) {
-                if (e.target.classList.contains('column-item')) {
-                    e.target.classList.remove('dragging');
-                }
+            columnList.addEventListener('dragend', e => {
+                const item = e.target.closest('.column-item');
+                if (item) item.classList.remove('dragging');
             });
 
-            // 拖拽经过事件
-            columnList.addEventListener('dragover', function(e) {
+            columnList.addEventListener('dragover', e => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
             });
 
-            // 放置事件
-            columnList.addEventListener('drop', function(e) {
+            columnList.addEventListener('drop', e => {
                 e.preventDefault();
-                if (dragSrcElement && e.target.classList.contains('column-item')) {
-                    const allItems = Array.from(columnList.querySelectorAll('.column-item'));
-                    const srcIndex = allItems.indexOf(dragSrcElement);
-                    const targetIndex = allItems.indexOf(e.target.closest('.column-item'));
+                const draggedColumn = e.dataTransfer.getData('text/plain'); // 拿到列名
+                if (!draggedColumn) return;
 
-                    if (srcIndex !== targetIndex) {
-                        // 更新列顺序数组
-                        const column = dragSrcElement.dataset.column;
-                        columnOrder.splice(srcIndex, 1);
-                        columnOrder.splice(targetIndex, 0, column);
+                const targetItem = document.elementFromPoint(e.clientX, e.clientY)
+                                           ?.closest('.column-item');
+                if (!targetItem || targetItem.dataset.column === draggedColumn) return;
 
-                        // 重新渲染编辑器以反映新顺序
-                        renderColumnEditor();
-                    }
-                }
+                const allColumns = Array.from(columnList.querySelectorAll('.column-item'))
+                                        .map(el => el.dataset.column);
+
+                const srcIndex = allColumns.indexOf(draggedColumn);
+                const tgtIndex = allColumns.indexOf(targetItem.dataset.column);
+
+                if (srcIndex === -1 || tgtIndex === -1) return; // 保险
+
+                // 更新顺序
+                columnOrder.splice(srcIndex, 1);
+                columnOrder.splice(tgtIndex, 0, draggedColumn);
+
+                // 重新渲染
+                renderColumnEditor();
             });
         }
 
