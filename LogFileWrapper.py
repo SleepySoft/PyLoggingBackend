@@ -78,6 +78,17 @@ class LogFileWrapper:
         except FileNotFoundError:
             self._file_id = None
 
+    def _log_id_to_index(self, log_id: int):
+        if not self.log_entries:
+            return None
+
+        first_id = self.log_entries[0]["_id"]  # 获取第一个元素的ID
+        index = log_id - first_id
+
+        if 0 <= index < len(self.log_entries):
+            return index
+        return None
+
     def _append_log_entries(self, lines: List[str]) -> None:
         """Append multiple log entries to cache with _id"""
         if not lines:
@@ -202,14 +213,14 @@ class LogFileWrapper:
         except Exception as e:
             print(f"Error stopping monitoring thread: {e}")
 
-    def get_logs(self, start_id: int, count: int,
+    def get_logs(self, start_log_id: int, count: int,
                  filter_func: Optional[Callable[[Dict], bool]] = None) -> List[Dict[str, Any]]:
         """
         Retrieve log entries starting from specified _id
 
         Args:
-            start_id: Minimum _id to return (inclusive)
-            count: Maximum number of entries to return
+            start_log_id: Minimum _id to return (inclusive)
+            count: Maximum number of entries to return, can be negative to fetch previous logs based on start_log_id.
             filter_func: Optional filter function to apply to entries
 
         Returns:
@@ -219,22 +230,31 @@ class LogFileWrapper:
             if not self.log_entries:
                 return []
 
-            # Find starting position in deque
-            start_index = 0
-            for i, entry in enumerate(self.log_entries):
-                if entry['_id'] >= start_id:
-                    start_index = i
-                    break
-            else:
-                return []  # No entries match start_id
+            start_log_index = self._log_id_to_index(start_log_id)
+            if start_log_index is None:
+                return []
 
-            # Collect matching entries
             result = []
-            for entry in itertools.islice(self.log_entries, start_index, None):
-                if len(result) >= count:
-                    break
-                if filter_func is None or filter_func(entry):
-                    result.append(entry)
+
+            if count >= 0:
+                # 正向获取日志
+                for entry in itertools.islice(self.log_entries, start_log_index, None):
+                    if len(result) >= count:
+                        break
+                    if filter_func is None or filter_func(entry):
+                        result.append(entry)
+            else:
+                # 负向获取日志 (从 start_log_id 向前取日志)
+                # count 的绝对值表示要取的日志数量
+                abs_count = abs(count)
+                # 从 start_log_index 向前遍历
+                for i in range(start_log_index, -1, -1):
+                    entry = self.log_entries[i]
+                    if filter_func is None or filter_func(entry):
+                        result.append(entry)
+                        if len(result) >= abs_count:
+                            break
+                result.reverse() # 因为是逆序添加的，所以需要反转列表
             return result
 
     def get_total_count(self, filter_func: Optional[Callable[[Dict], bool]] = None) -> int:
@@ -256,41 +276,44 @@ class LogFileWrapper:
         with self.lock:
             return self.log_entries[-1]['_id'] if self.log_entries else -1
 
-    def check_updates(self, current_id: int) -> Dict[str, Any]:
-        """
-        Check if new logs are available since specified _id
-
-        Args:
-            current_id: Last known _id by client
-
-        Returns:
-            Dictionary with update information:
-            {
-                'has_updates': bool,
-                'new_count': int,
-                'min_id': int,
-                'max_id': int
-            }
-        """
+    def check_updates(self, current_log_id: int) -> bool:
         with self.lock:
-            if not self.log_entries:
-                return {
-                    'has_updates': False,
-                    'new_count': 0,
-                    'min_id': 0,
-                    'max_id': 0
-                }
+            return current_log_id < self.get_newest_log_id()
 
-            min_id = self.log_entries[0]['_id']
-            max_id = self.log_entries[-1]['_id']
-            new_count = max(0, max_id - max(min_id - 1, current_id))
-
-            return {
-                'has_updates': new_count > 0,
-                'new_count': new_count,
-                'min_id': min_id,
-                'max_id': max_id
-            }
+        # """
+        # Check if new logs are available since specified _id
+        #
+        # Args:
+        #     current_log_id: Last known _id by client
+        #
+        # Returns:
+        #     Dictionary with update information:
+        #     {
+        #         'has_updates': bool,
+        #         'new_count': int,
+        #         'min_id': int,
+        #         'max_id': int
+        #     }
+        # """
+        # with self.lock:
+        #     if not self.log_entries:
+        #         return {
+        #             'has_updates': False,
+        #             'new_count': 0,
+        #             'min_id': 0,
+        #             'max_id': 0
+        #         }
+        #
+        #     min_id = self.log_entries[0]['_id']
+        #     max_id = self.log_entries[-1]['_id']
+        #     new_count = max(0, max_id - max(min_id - 1, current_log_id))
+        #
+        #     return {
+        #         'has_updates': new_count > 0,
+        #         'new_count': new_count,
+        #         'min_id': min_id,
+        #         'max_id': max_id
+        #     }
 
 
 # ----------------------------------------------------------------------------------------------------------------------

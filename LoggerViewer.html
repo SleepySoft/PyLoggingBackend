@@ -928,7 +928,7 @@
                     setupEventSource();
                 })
                 .catch(error => {
-                    console.error('Initial log load failed, starting SSE without last_id', error);
+                    console.error('Initial log load failed, starting SSE without last_log_id', error);
                     setupEventSource();
                 });
         }
@@ -1099,7 +1099,7 @@
                 } else {
                     // 向后端要 “start=oldestIndex” 开始往后 limit 条
                     // 因为后端 index 是 0→N（越老越小），所以这样就是“更旧”
-                    params.set('start', oldestIndex - currentLimit);
+                    params.set('start_log_id', oldestIndex - currentLimit);
                     params.set('limit', currentLimit);
                 }
 
@@ -1197,9 +1197,9 @@
 
             updateConnectionStatus('connecting');
 
-            // Build query parameters with last_id and filters
+            // Build query parameters with last_log_id and filters
             const params = new URLSearchParams();
-            params.append('last_id', lastReceivedId);
+            params.append('last_log_id', lastReceivedId);
 
             selectedLevels.forEach(level => {
                 params.append('level[]', level);
@@ -1236,21 +1236,34 @@
                 if (!document.getElementById('autoRefresh').checked) return;
 
                 try {
-                    const log = JSON.parse(event.data);
+                    const rawData = JSON.parse(event.data);
+                    let logs = [];
 
-                    // Update lastReceivedId regardless of visibility
-                    lastReceivedId = log._id;
-
-                    if (isLogVisible(log, selectedLevels, selectedModules)) {
-                        addNewLogEntry(log);
-
-                        // Update statistics
-                        totalEntries++;
-                        document.getElementById('entryCount').textContent = 
-                            `${totalEntries.toLocaleString()} Entries`;
-                        document.getElementById('mainEntryCount').textContent = 
-                            `${totalEntries.toLocaleString()} Entries`;
+                    // 确保 logs 变量总是一个数组
+                    if (Array.isArray(rawData)) {
+                        logs = rawData;
+                    } else {
+                        // 如果收到的不是数组，则将其包装成一个数组
+                        logs = [rawData];
                     }
+
+                    logs.forEach(log => {
+                        // Update lastReceivedId regardless of visibility (using the ID of the last log in the batch)
+                        // If you want to track the highest ID across all received logs, you might need a different logic
+                        lastReceivedId = log._id; // This will be updated for each log in the batch, effectively storing the last one's ID.
+
+                        if (isLogVisible(log, selectedLevels, selectedModules)) {
+                            addNewLogEntry(log);
+
+                            // Update statistics for each visible log
+                            totalEntries++;
+                            document.getElementById('entryCount').textContent =
+                                `${totalEntries.toLocaleString()} Entries`;
+                            document.getElementById('mainEntryCount').textContent =
+                                `${totalEntries.toLocaleString()} Entries`;
+                        }
+                    });
+
                 } catch (error) {
                     console.error('Error parsing SSE message:', error);
                 }

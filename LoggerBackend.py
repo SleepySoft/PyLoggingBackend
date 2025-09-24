@@ -100,7 +100,7 @@ class LoggerBackend:
         # Get all entries with filtering applied
         total_entries = self.log_wrapper.get_total_count()
         logs = self.log_wrapper.get_logs(
-            start_id=0,
+            start_log_id=0,
             count=total_entries
         )
 
@@ -125,41 +125,35 @@ class LoggerBackend:
     def get_logs(self):
         """Get logs with filtering and pagination using _id"""
         try:
-            start_arg = request.args.get('start')
+            start_arg = request.args.get('start_log_id')
             limit = int(request.args.get('limit', 100))
             level_filter = request.args.getlist('level[]')
             module_filter = request.args.getlist('module[]')
 
-            # Get total number of entries
-            total_entries = self.log_wrapper.get_total_count()
-
             if start_arg is not None:
-                start = int(start_arg)
+                start_log_id = int(start_arg)
             else:
                 newest_id = self.log_wrapper.get_newest_log_id()
-                start = newest_id - limit
+                start_log_id = newest_id - limit
 
-            # # Calculate range to fetch (newest first)
-            # end_index = total_entries - 1
-            # start_index = max(0, end_index - start - limit + 1)
-            # count = min(limit, end_index - start_index + 1)
+            filter_func = lambda entry: (
+                    (not level_filter or entry.get('levelname', 'UNKNOWN') in level_filter) and
+                    (not module_filter or (entry.get('module', '') + '.' + entry.get('name', '')) in module_filter)
+            )
 
             # Fetch log entries using _id
-            logs = self.log_wrapper.get_logs(
-                start_id=start,
-                count=limit,
-                filter_func=lambda entry: (
-                        (not level_filter or entry.get('levelname', 'UNKNOWN') in level_filter) and
-                        (not module_filter or (entry.get('module', '') + '.' + entry.get('name', '')) in module_filter)
-                )
-            )
+            logs = self.log_wrapper.get_logs(start_log_id=start_log_id, count=limit, filter_func=filter_func)
+
+            # Get total number of entries
+            total_entries = self.log_wrapper.get_total_count(filter_func)
+            newest_log_id = self.log_wrapper.get_newest_log_id()
 
             return jsonify({
                 'logs': logs,
                 'total': total_entries,
-                'start': start,
+                'start': start_log_id,
                 'limit': limit,
-                'hasMore': (start + limit) < total_entries
+                'hasMore': logs and logs[-1]['_id'] < newest_log_id
             })
 
         except Exception as e:
@@ -168,12 +162,17 @@ class LoggerBackend:
     def stream_logs(self):
         """Server-sent events with _id based updates"""
         # Get last_id from query parameter or session
-        last_id = request.args.get('last_id', -1, type=int)
-        if last_id < 0 :
-            last_id = self.log_wrapper.get_newest_log_id()
+        limit = int(request.args.get('limit', 100))
+        last_log_id_arg  = request.args.get('last_log_id')
+
+        last_log_id = int(last_log_id_arg) if last_log_id_arg is not None else None
+
+        if not last_log_id or last_log_id < 0:
+            newest_id = self.log_wrapper.get_newest_log_id()
+            last_log_id = newest_id - limit
 
         def event_stream():
-            current_last_id = last_id
+            current_last_id = last_log_id
             last_heartbeat = time.time()
 
             while True:
@@ -186,13 +185,13 @@ class LoggerBackend:
                 # Check for new entries
                 if self.log_wrapper.check_updates(current_last_id):
                     new_entries = self.log_wrapper.get_logs(
-                        start_id=current_last_id + 1,
-                        count=100
+                        start_log_id=last_log_id + 1,
+                        count=limit
                     )
 
-                    for entry in new_entries:
-                        current_last_id = entry['_id']
-                        yield f"data: {json.dumps(entry)}\n\n"
+                    if new_entries:
+                        current_last_id = new_entries[-1]['_id']
+                        yield f"data: {json.dumps(new_entries)}\n\n"
 
                 time.sleep(0.5)
 

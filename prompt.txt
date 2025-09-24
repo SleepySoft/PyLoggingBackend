@@ -1,0 +1,5 @@
+def _log_id_to_index(self, log_id: int):
+    # TODO: This function is only for internal use. Get lock before calling this function.
+    # self.log_entries是一个dict的enqueue，新的log会被append进去，每条数据会有一个"_id"字段，保存该log的ID。
+    # 实现该函数，通过log_id找到对应的log index。理论上，这个deque中的log其_id是连续和有序的。可以使用优化的方法加速查找。
+    pass
