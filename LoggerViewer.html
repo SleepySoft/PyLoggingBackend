@@ -368,6 +368,108 @@
         .module-checkbox {
             margin-right: 5px;
         }
+
+        /* 表头编辑器样式 */
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            position: sticky;
+            top: 0;
+            z-index: 99;
+        }
+
+        .header-editor-btn {
+            background: transparent;
+            border: none;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+
+        .header-editor-btn:hover {
+            background-color: #e9ecef;
+            color: #495057;
+        }
+
+        .header-editor-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 10px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 1rem;
+            min-width: 250px;
+            z-index: 100;
+            display: none;
+        }
+
+        .header-editor-dropdown.show {
+            display: block;
+        }
+
+        .column-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+            border-radius: 4px;
+            cursor: move;
+        }
+
+        .column-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .column-checkbox {
+            margin-right: 0.5rem;
+        }
+
+        .column-handle {
+            margin-right: 0.5rem;
+            color: #6c757d;
+            cursor: grab;
+        }
+
+        .dragging {
+            opacity: 0.7;
+            background-color: #e9ecef;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .log-table th {
+            background-color: #f8f9fa;
+            padding: 0.75rem;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #dee2e6;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .log-table th:hover {
+            background-color: #e9ecef;
+        }
+
+        .log-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: top;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
     </style>
 </head>
 <body>
@@ -485,6 +587,30 @@
             </div>
 
             <div class="log-entries-container" id="logEntries">
+                <div class="log-header">
+                    <h6 class="mb-0">Log Entries</h6>
+                    <button class="header-editor-btn" id="headerEditorBtn">
+                        <i class="fas fa-cog"></i> Customize Columns
+                    </button>
+                    <div class="header-editor-dropdown" id="headerEditorDropdown">
+                        <h6>Select Visible Columns</h6>
+                        <button id="applyColumnBtn" onclick="applyColumnSettings()">Apply</button>
+                        <div id="columnList"></div>
+                        <button class="btn btn-sm btn-primary mt-2" onclick="applyColumnSettings()">Apply</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="log-table">
+                        <thead id="logTableHeader">
+                            <!-- 表头将由JavaScript动态生成 -->
+                        </thead>
+                        <tbody id="logTableBody">
+                            <!-- 日志行将由JavaScript动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+
                 <div class="scroll-observer" id="scrollObserver"></div>
             </div>
 
@@ -527,6 +653,7 @@
             loadInitialData();
             setupScrollObserver();
             setupScrollToBottom();
+            initHeaderEditor();
             setInterval(updateStats, 30000);
         });
 
@@ -798,6 +925,7 @@
             updateSelectedLevels();
             updateSelectedModules();
             updateFilterStatus();
+            clearLogTable();
 
             // Close existing SSE connection
             if (eventSource) {
@@ -878,8 +1006,7 @@
                         console.log('Received logs data:', data);
 
                         if (reset) {
-                            document.getElementById('logEntries').innerHTML = 
-                                '<div class="scroll-observer" id="scrollObserver"></div>';
+                            clearLogTable()
                         }
 
                         renderLogs(data.logs, reset);
@@ -1121,44 +1248,6 @@
             return logElement;
         }
 
-        // 渲染日志
-        function renderLogs(logs, reset = false) {
-            const container = document.getElementById('logEntries');
-
-            if (reset) {
-                container.innerHTML = '';
-            }
-
-            const fragment = document.createDocumentFragment();
-
-            logs.forEach(log => {
-                if (isLogVisible(log)) {
-                    const logElement = createLogElement(log);
-                    fragment.appendChild(logElement);
-                }
-            });
-
-            if (reset) {
-                container.appendChild(fragment);
-            } else {
-                // 在现有内容前添加新日志
-                const firstChild = container.firstChild;
-                container.insertBefore(fragment, firstChild);
-            }
-
-            // 添加滚动观察器（如果不存在）
-            if (!document.getElementById('scrollObserver')) {
-                const observerElement = document.createElement('div');
-                observerElement.className = 'scroll-observer';
-                observerElement.id = 'scrollObserver';
-                container.appendChild(observerElement);
-
-                if (observer) {
-                    observer.observe(observerElement);
-                }
-            }
-        }
-
         // Load more logs when scrolling up
         function loadMoreLogs() {
             if (!isLoading && hasMoreLogs) {
@@ -1222,6 +1311,331 @@
                     document.getElementById('statsPanel').innerHTML = 
                         '<div class="text-center text-danger">Error loading statistics</div>';
                 });
+        }
+
+        // 列配置管理
+        let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
+        let visibleColumns = ['asctime', 'levelname', 'module', 'message'];
+        let columnOrder = ['asctime', 'levelname', 'module', 'message'];
+
+        // 初始化表头编辑器
+        function initHeaderEditor() {
+            // 从localStorage加载保存的设置
+            const savedSettings = localStorage.getItem('logViewerColumnSettings');
+            if (savedSettings) {
+                try {
+                    const settings = JSON.parse(savedSettings);
+                    if (settings.visibleColumns) visibleColumns = settings.visibleColumns;
+                    if (settings.columnOrder) columnOrder = settings.columnOrder;
+                } catch (e) {
+                    console.error('Error loading column settings:', e);
+                }
+            }
+
+            // 设置表头编辑器按钮点击事件
+            document.getElementById('headerEditorBtn').addEventListener('click', function(e) {
+                e.stopPropagation();
+                const dropdown = document.getElementById('headerEditorDropdown');
+                dropdown.classList.toggle('show');
+
+                if (dropdown.classList.contains('show')) {
+                    renderColumnEditor();
+                    setupColumnEventDelegation();
+                }
+            });
+
+            // 点击页面其他区域关闭下拉框
+            document.addEventListener('click', function(e) {
+                const dropdown = document.getElementById('headerEditorDropdown');
+                if (dropdown.classList.contains('show') &&
+                    !dropdown.contains(e.target) &&
+                    !document.getElementById('headerEditorBtn').contains(e.target)) {
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            // 初始化表头
+            renderTableHeader();
+        }
+
+        // 渲染列编辑器
+        function renderColumnEditor() {
+            const columnList = document.getElementById('columnList');
+            columnList.innerHTML = '';
+
+            // 对列按照当前顺序排序
+            const orderedColumns = [...availableColumns].sort((a, b) => {
+                return columnOrder.indexOf(a) - columnOrder.indexOf(b);
+            });
+
+            orderedColumns.forEach(column => {
+                const isChecked = visibleColumns.includes(column);
+
+                const columnItem = document.createElement('div');
+                columnItem.className = 'column-item';
+                columnItem.dataset.column = column;
+                columnItem.draggable = true;
+
+                columnItem.innerHTML = `
+                    <span class="column-handle"><i class="fas fa-grip-vertical"></i></span>
+                    <input type="checkbox" class="column-checkbox" id="col-${column}"
+                           ${isChecked ? 'checked' : ''}>
+                    <label for="col-${column}">${column}</label>
+                `;
+
+                columnList.appendChild(columnItem);
+            });
+
+            // 设置拖拽事件
+            setupDragAndDrop();
+        }
+
+        // 设置拖拽排序功能
+        function setupDragAndDrop() {
+            const columnList = document.getElementById('columnList');
+
+            let dragSrcElement = null;
+
+            // 拖拽开始事件
+            columnList.addEventListener('dragstart', function(e) {
+                if (e.target.classList.contains('column-item')) {
+                    dragSrcElement = e.target;
+                    e.target.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', e.target.dataset.column);
+                }
+            });
+
+            // 拖拽结束事件
+            columnList.addEventListener('dragend', function(e) {
+                if (e.target.classList.contains('column-item')) {
+                    e.target.classList.remove('dragging');
+                }
+            });
+
+            // 拖拽经过事件
+            columnList.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+
+            // 放置事件
+            columnList.addEventListener('drop', function(e) {
+                e.preventDefault();
+                if (dragSrcElement && e.target.classList.contains('column-item')) {
+                    const allItems = Array.from(columnList.querySelectorAll('.column-item'));
+                    const srcIndex = allItems.indexOf(dragSrcElement);
+                    const targetIndex = allItems.indexOf(e.target.closest('.column-item'));
+
+                    if (srcIndex !== targetIndex) {
+                        // 更新列顺序数组
+                        const column = dragSrcElement.dataset.column;
+                        columnOrder.splice(srcIndex, 1);
+                        columnOrder.splice(targetIndex, 0, column);
+
+                        // 重新渲染编辑器以反映新顺序
+                        renderColumnEditor();
+                    }
+                }
+            });
+        }
+
+        // 应用列设置
+        function applyColumnSettings() {
+            const checkboxes = document.querySelectorAll('.column-checkbox:checked');
+            visibleColumns = Array.from(checkboxes).map(cb => cb.id.replace('col-', ''));
+
+            // 保存设置到localStorage
+            const settings = {
+                visibleColumns: visibleColumns,
+                columnOrder: columnOrder
+            };
+
+            try {
+                localStorage.setItem('logViewerColumnSettings', JSON.stringify(settings));
+                console.log('Settings saved:', settings);
+            } catch (e) {
+                console.error('Failed to save settings to localStorage:', e);
+            }
+
+            // 更新表头
+            renderTableHeader();
+
+            // 重新渲染现有日志
+            rerenderLogs();
+
+            // 关闭下拉框
+            document.getElementById('headerEditorDropdown').classList.remove('show');
+        }
+
+        // 渲染表头
+        function renderTableHeader() {
+            const headerRow = document.getElementById('logTableHeader');
+            headerRow.innerHTML = '';
+
+            visibleColumns.forEach(column => {
+                const th = document.createElement('th');
+                th.textContent = column;
+                th.dataset.column = column;
+                headerRow.appendChild(th);
+            });
+        }
+
+        function extractAvailableColumns(logs) {
+            const allFields = new Set();
+
+            // 确保包含已知的基本字段，即使它们尚未在日志中出现
+            const baseFields = ['asctime', 'levelname', 'module', 'message', 'funcName'];
+            baseFields.forEach(field => allFields.add(field));
+
+            // 从日志数据中提取其他所有可能字段
+            if (logs && logs.length > 0) {
+                logs.forEach(log => {
+                    // 遍历日志对象的所有属性
+                    for (const key in log) {
+                        if (log.hasOwnProperty(key)) { // 确保是对象自身的属性，而非继承的
+                            allFields.add(key);
+                        }
+                    }
+                });
+            }
+            // 更新全局变量
+            availableColumns = Array.from(allFields);
+        }
+
+        // 重新渲染所有日志（当列设置改变时）
+        function rerenderLogs() {
+            const tbody = document.getElementById('logTableBody');
+            tbody.innerHTML = '';
+
+            // 获取所有日志条目（需要根据您的实际数据结构调整）
+            const logEntries = document.querySelectorAll('.log-entry');
+
+            logEntries.forEach(logEntry => {
+                // 这里需要根据您的实际日志数据结构来提取数据
+                // 这只是一个示例实现
+                const logData = {
+                    asctime: logEntry.querySelector('.timestamp')?.textContent,
+                    levelname: logEntry.querySelector('.level-badge')?.textContent,
+                    module: logEntry.querySelector('.module')?.textContent,
+                    message: logEntry.querySelector('span:last-child')?.textContent
+                };
+
+                addLogRow(logData);
+            });
+        }
+
+        // 修改现有的addNewLogEntry函数
+        function addNewLogEntry(log) {
+            if (!isLogVisible(log)) {
+                return;
+            }
+
+            // 添加到表格中
+            addLogRow(log);
+
+            // 更新条目计数
+            totalEntries++;
+            document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
+            document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
+
+            // 如果自动滚动启用且用户接近底部，滚动到底部
+            if (autoScrollEnabled && isNearBottom) {
+                setTimeout(() => {
+                    scrollToBottom();
+                }, 50);
+            }
+
+            // 移除初始加载提示（如果存在）
+            document.getElementById('initialLoading').style.display = 'none';
+        }
+
+        // 添加日志行到表格
+        function addLogRow(log) {
+            const tbody = document.getElementById('logTableBody');
+            const tr = document.createElement('tr');
+            tr.className = `log-level-${log.levelname}`;
+
+            visibleColumns.forEach(column => {
+                const td = document.createElement('td');
+                td.textContent = log[column] || '';
+
+                // 为特定列添加特殊样式
+                if (column === 'levelname') {
+                    td.innerHTML = `<span class="level-badge badge-${log.levelname}">${log.levelname}</span>`;
+                } else if (column === 'asctime') {
+                    td.innerHTML = `<span class="timestamp">${log.asctime}</span>`;
+                } else if (column === 'module' && log.module) {
+                    td.innerHTML = `<span class="module" title="${log.module}">${log.module}</span>`;
+                }
+
+                tr.appendChild(td);
+            });
+
+            tbody.appendChild(tr);
+        }
+
+        function renderLogs(logs, reset = false) {
+            // 提取可用字段
+            extractAvailableColumns(logs);
+
+            const tbody = document.getElementById('logTableBody');
+
+            if (reset) {
+                tbody.innerHTML = '';
+            }
+
+            logs.forEach(log => {
+                if (isLogVisible(log)) {
+                    addLogRow(log);
+                }
+            });
+
+            ensureScrollObserver();
+        }
+
+        function clearLogTable() {
+            const tbody = document.getElementById('logTableBody');
+            if (tbody) {
+                tbody.innerHTML = '';
+            }
+
+            // 重置计数器和其他状态
+            currentStart = 0;
+            hasMoreLogs = true;
+            totalEntries = 0;
+
+            // 更新界面显示
+            document.getElementById('entryCount').textContent = '0 Entries';
+            document.getElementById('mainEntryCount').textContent = '0 Entries';
+        }
+
+        function ensureScrollObserver() {
+            if (!document.getElementById('scrollObserver')) {
+                const observerElement = document.createElement('div');
+                observerElement.className = 'scroll-observer';
+                observerElement.id = 'scrollObserver';
+                document.getElementById('logEntries').appendChild(observerElement);
+
+                if (observer) {
+                    observer.observe(observerElement);
+                }
+            }
+        }
+
+        function setupColumnEventDelegation() {
+            const columnList = document.getElementById('columnList');
+
+            // 处理复选框的点击事件（事件委托）
+            columnList.addEventListener('change', function(e) {
+                if (e.target && e.target.classList.contains('column-checkbox')) {
+                    // 复选框状态已变，无需额外操作
+                    console.log('Checkbox changed:', e.target.id, e.target.checked);
+                }
+            });
+
+            // 处理应用按钮的点击事件
+            document.getElementById('applyColumnBtn').addEventListener('click', applyColumnSettings);
         }
     </script>
 </body>
