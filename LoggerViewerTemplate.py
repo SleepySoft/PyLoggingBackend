@@ -13,20 +13,20 @@ LOGGER_VIEWER = """
             --sidebar-collapsed-width: 50px;
             --transition-speed: 0.3s;
         }
-        
+
         body {
             overflow: hidden;
             height: 100vh;
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
-        
+
         .main-container {
             display: flex;
             height: 100vh;
             transition: all var(--transition-speed);
         }
-        
+
         .sidebar {
             width: var(--sidebar-width);
             height: 100%;
@@ -38,22 +38,22 @@ LOGGER_VIEWER = """
             flex-direction: column;
             position: relative;
         }
-        
+
         .sidebar.collapsed {
             width: var(--sidebar-collapsed-width);
         }
-        
+
         .sidebar-content {
             flex: 1;
             overflow-y: auto;
             padding: 1rem;
             display: block;
         }
-        
+
         .sidebar.collapsed .sidebar-content {
             display: none;
         }
-        
+
         .toggle-sidebar-btn {
             position: absolute;
             top: 10px;
@@ -70,15 +70,15 @@ LOGGER_VIEWER = """
             justify-content: center;
             cursor: pointer;
         }
-        
+
         .toggle-sidebar-btn:hover {
             background: #5a6268;
         }
-        
+
         .sidebar.collapsed .toggle-sidebar-btn {
             right: 8px;
         }
-        
+
         .log-container {
             flex: 1;
             height: 100vh;
@@ -86,13 +86,13 @@ LOGGER_VIEWER = """
             flex-direction: column;
             background-color: white;
         }
-        
+
         .log-entries-container {
             flex: 1;
             overflow-y: auto;
             padding: 1rem;
         }
-        
+
         .log-entry {
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 12px;
@@ -104,25 +104,25 @@ LOGGER_VIEWER = """
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             line-height: 1.4;
         }
-        
+
         .log-level-DEBUG { border-left-color: #6c757d; background-color: #f8f9fa; }
         .log-level-INFO { border-left-color: #0dcaf0; background-color: #e8f4f8; }
         .log-level-WARNING { border-left-color: #ffc107; background-color: #fff9e6; }
         .log-level-ERROR { border-left-color: #dc3545; background-color: #fdecea; }
         .log-level-CRITICAL { border-left-color: #6f42c1; background-color: #f3f0f7; }
-        
+
         .timestamp { 
             color: #6c757d; 
             font-weight: bold;
             margin-right: 8px;
         }
-        
+
         .module { 
             color: #0d6efd; 
             font-weight: bold;
             margin-right: 8px;
         }
-        
+
         .level-badge {
             padding: 2px 6px;
             border-radius: 4px;
@@ -131,13 +131,13 @@ LOGGER_VIEWER = """
             margin-right: 8px;
             color: white;
         }
-        
+
         .badge-DEBUG { background-color: #6c757d; }
         .badge-INFO { background-color: #0dcaf0; }
         .badge-WARNING { background-color: #ffc107; }
         .badge-ERROR { background-color: #dc3545; }
         .badge-CRITICAL { background-color: #6f42c1; }
-        
+
         .module-tree {
             max-height: 300px;
             overflow-y: auto;
@@ -148,22 +148,22 @@ LOGGER_VIEWER = """
             background-color: white;
             margin-bottom: 1rem;
         }
-        
+
         .filter-section {
             margin-bottom: 1rem;
         }
-        
+
         .form-check-input:checked {
             background-color: #0d6efd;
             border-color: #0d6efd;
         }
-        
+
         .scroll-observer {
             height: 1px;
             width: 100%;
             visibility: hidden;
         }
-        
+
         .log-controls {
             display: flex;
             justify-content: space-between;
@@ -172,16 +172,16 @@ LOGGER_VIEWER = """
             background-color: #f8f9fa;
             border-top: 1px solid #dee2e6;
         }
-        
+
         .stats-item {
             margin-bottom: 0.5rem;
         }
-        
+
         .stats-value {
             font-weight: bold;
             float: right;
         }
-        
+
         .status-indicator {
             display: inline-flex;
             align-items: center;
@@ -191,42 +191,42 @@ LOGGER_VIEWER = """
             font-size: 0.875rem;
             font-weight: 500;
         }
-        
+
         .status-indicator .dot {
             width: 8px;
             height: 8px;
             border-radius: 50%;
             display: inline-block;
         }
-        
+
         .status-connected {
             background-color: #198754;
             color: #fff;
         }
-        
+
         .status-connected .dot {
             background-color: #fff;
         }
-        
+
         .status-connecting {
             background-color: #ffc107;
             color: #000;
         }
-        
+
         .status-connecting .dot {
             background-color: #000;
             animation: pulse 1.5s infinite;
         }
-        
+
         .status-disconnected {
             background-color: #dc3545;
             color: #fff;
         }
-        
+
         .status-disconnected .dot {
             background-color: #fff;
         }
-        
+
         .loading-indicator {
             display: flex;
             justify-content: center;
@@ -234,7 +234,7 @@ LOGGER_VIEWER = """
             padding: 1rem;
             color: #6c757d;
         }
-        
+
         .loading-spinner {
             width: 1.5rem;
             height: 1.5rem;
@@ -244,7 +244,7 @@ LOGGER_VIEWER = """
             animation: spin 1s linear infinite;
             margin-right: 0.5rem;
         }
-        
+
         .log-controls {
             display: flex;
             justify-content: space-between;
@@ -256,7 +256,7 @@ LOGGER_VIEWER = """
             bottom: 0;
             z-index: 100;
         }
-        
+
         .auto-scroll-btn {
             background: transparent;
             border: none;
@@ -267,26 +267,26 @@ LOGGER_VIEWER = """
             align-items: center;
             gap: 0.25rem;
         }
-        
+
         .auto-scroll-btn.active {
             color: #0d6efd;
         }
-        
+
         .auto-scroll-btn:hover {
             color: #0d6efd;
         }
-        
+
         @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.4; }
             100% { opacity: 1; }
         }
-        
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
+
         .scroll-to-bottom {
             position: fixed;
             right: 2rem;
@@ -305,11 +305,11 @@ LOGGER_VIEWER = """
             opacity: 0;
             transition: opacity 0.3s;
         }
-        
+
         .scroll-to-bottom.visible {
             opacity: 1;
         }
-        
+
         /* 修复状态指示器布局 */
         .status-container {
             display: flex;
@@ -317,7 +317,7 @@ LOGGER_VIEWER = """
             gap: 1rem;
             flex-wrap: wrap;
         }
-        
+
         .collapsed-status {
             display: none;
             position: absolute;
@@ -325,19 +325,49 @@ LOGGER_VIEWER = """
             left: 10px;
             z-index: 1000;
         }
-        
+
         .sidebar.collapsed .collapsed-status {
             display: block;
         }
-        
+
         .collapsed-status .status-indicator {
             padding: 0.15rem 0.5rem;
             font-size: 0.75rem;
         }
-        
+
         .collapsed-status .status-indicator .dot {
             width: 6px;
             height: 6px;
+        }
+
+        /* 模块树样式 */
+        .module-item {
+            padding: 4px 0;
+        }
+
+        .module-label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+
+        .module-label:hover {
+            background-color: #f0f0f0;
+        }
+
+        .module-children {
+            margin-left: 20px;
+        }
+
+        .module-toggle {
+            margin-right: 5px;
+            cursor: pointer;
+            width: 16px;
+            text-align: center;
+        }
+
+        .module-checkbox {
+            margin-right: 5px;
         }
     </style>
 </head>
@@ -348,7 +378,7 @@ LOGGER_VIEWER = """
             <button class="toggle-sidebar-btn" onclick="toggleSidebar()">
                 <i class="fas fa-bars" id="sidebarIcon"></i>
             </button>
-            
+
             <!-- 折叠状态下的状态指示器 -->
             <div class="collapsed-status">
                 <span id="collapsedConnectionStatus" class="status-indicator status-connecting">
@@ -356,7 +386,7 @@ LOGGER_VIEWER = """
                     <span id="collapsedStatusText">Connecting</span>
                 </span>
             </div>
-            
+
             <div class="sidebar-content">
                 <!-- Filters Panel -->
                 <div class="card mb-3">
@@ -391,7 +421,7 @@ LOGGER_VIEWER = """
                                 <label class="form-check-label" for="level-critical">CRITICAL</label>
                             </div>
                         </div>
-                        
+
                         <!-- Module Tree -->
                         <div class="filter-section">
                             <label class="form-label fw-bold">Modules:</label>
@@ -401,17 +431,17 @@ LOGGER_VIEWER = """
                                 </div>
                             </div>
                         </div>
-                        
+
                         <button class="btn btn-primary w-100" onclick="applyFilters()">
                             <i class="fas fa-check"></i> Apply Filters
                         </button>
-                        
+
                         <div class="filter-status-bar">
                             <small>Show Level: <span id="filterStatus">ALL</span></small>
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Statistics -->
                 <div class="card">
                     <div class="card-header bg-info text-white">
@@ -423,7 +453,7 @@ LOGGER_VIEWER = """
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="log-controls">
                     <div class="status-container">
                         <span id="connectionStatus" class="status-indicator status-connecting">
@@ -441,7 +471,7 @@ LOGGER_VIEWER = """
                 </div>
             </div>
         </div>
-        
+
         <!-- Main Log Content -->
         <div class="log-container">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
@@ -454,21 +484,21 @@ LOGGER_VIEWER = """
                     </label>
                 </div>
             </div>
-            
+
             <div class="log-entries-container" id="logEntries">
                 <div class="scroll-observer" id="scrollObserver"></div>
             </div>
-            
+
             <div class="text-center p-3 text-muted" id="initialLoading">
                 <i class="fas fa-spinner fa-spin"></i> Loading logs...
             </div>
-            
+
             <div class="log-controls">
                 <div>
                     <span class="text-muted" id="mainEntryCount">0 Entries</span>
                 </div>
             </div>
-            
+
             <div id="scrollToBottom" class="scroll-to-bottom" title="滚动到底部">
                 <i class="fas fa-arrow-down"></i>
             </div>
@@ -489,45 +519,46 @@ LOGGER_VIEWER = """
         let totalEntries = 0;
         let autoScrollEnabled = true;
         let isNearBottom = true;
-        
+        let lastReceivedId = -1; // Track last received log ID
+        let moduleHierarchy = {}; // Store module hierarchy data
+
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
             initializeEventListeners();
             loadInitialData();
-            setupEventSource();
             setupScrollObserver();
             setupScrollToBottom();
             setInterval(updateStats, 30000);
         });
-        
+
         window.addEventListener('beforeunload', () => {
             if (eventSource) {
                 eventSource.close();
                 eventSource = null;
             }
         });
-        
+
         // Initialize event listeners
         function initializeEventListeners() {
             // Level checkbox listeners
             document.querySelectorAll('.level-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', updateSelectedLevels);
             });
-            
+
             var applyButton = document.querySelector('button[onclick="applyFilters()"]');
             if (applyButton) {
                 applyButton.addEventListener('click', applyFilters);
             }
-            
+
             // 自动滚动按钮监听
             document.getElementById('autoScrollBtn').addEventListener('click', toggleAutoScroll);
-            
+
             // 滚动到底部按钮监听
             document.getElementById('scrollToBottom').addEventListener('click', scrollToBottom);
-            
+
             // 监听滚动事件以检测是否接近底部
             document.querySelector('.log-entries-container').addEventListener('scroll', checkScrollPosition);
-            
+
             // Auto-refresh toggle
             document.getElementById('autoRefresh').addEventListener('change', function() {
                 if (this.checked && !eventSource) {
@@ -538,12 +569,12 @@ LOGGER_VIEWER = """
                 }
             });
         }
-        
+
         // Toggle sidebar collapse/expand
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const icon = document.getElementById('sidebarIcon');
-            
+
             sidebar.classList.toggle('collapsed');
             if (sidebar.classList.contains('collapsed')) {
                 icon.className = 'fas fa-chevron-right';
@@ -551,7 +582,7 @@ LOGGER_VIEWER = """
                 icon.className = 'fas fa-bars';
             }
         }
-        
+
         // Setup Intersection Observer for infinite scroll
         function setupScrollObserver() {
             const options = {
@@ -559,30 +590,31 @@ LOGGER_VIEWER = """
                 rootMargin: '0px',
                 threshold: 0.1
             };
-            
+
             observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    if (entry.isIntersecting && hasMoreLogs && !isLoading) {
+                    // 添加边界检查，防止无限加载
+                    if (entry.isIntersecting && hasMoreLogs && !isLoading && currentStart > 0) {
                         loadMoreLogs();
                     }
                 });
             }, options);
-            
+
             const observerElement = document.getElementById('scrollObserver');
             if (observerElement) {
                 observer.observe(observerElement);
             }
         }
-        
+
         function checkScrollPosition() {
             const container = document.querySelector('.log-entries-container');
             const scrollTop = container.scrollTop;
             const scrollHeight = container.scrollHeight;
             const clientHeight = container.clientHeight;
-            
+
             // 如果距离底部小于100px，则认为接近底部
             isNearBottom = (scrollHeight - scrollTop - clientHeight) < 100;
-            
+
             // 显示或隐藏"滚动到底部"按钮
             const scrollButton = document.getElementById('scrollToBottom');
             if (isNearBottom) {
@@ -594,24 +626,24 @@ LOGGER_VIEWER = """
                 scrollButton.classList.add('visible');
             }
         }
-        
+
         // 设置滚动到底部按钮
         function setupScrollToBottom() {
             // 初始检查位置
             checkScrollPosition();
         }
-        
+
         // 滚动到底部
         function scrollToBottom() {
             const container = document.querySelector('.log-entries-container');
             container.scrollTop = container.scrollHeight;
         }
-        
+
         // 切换自动滚动
         function toggleAutoScroll() {
             autoScrollEnabled = !autoScrollEnabled;
             const button = document.getElementById('autoScrollBtn');
-            
+
             if (autoScrollEnabled) {
                 button.classList.add('active');
                 button.title = "自动滚动已启用";
@@ -621,21 +653,34 @@ LOGGER_VIEWER = """
                 button.title = "自动滚动已禁用";
             }
         }
-        
+
         // Update selected levels from checkboxes
         function updateSelectedLevels() {
             selectedLevels = Array.from(document.querySelectorAll('.level-checkbox:checked'))
                 .map(checkbox => checkbox.value.toUpperCase());
             console.log('Selected levels:', selectedLevels);
         }
-        
+
         // Load initial data
         function loadInitialData() {
             fetchModuleHierarchy();
-            fetchLogs(true);
             updateStats();
+
+            // Load logs first, then setup SSE
+            fetchLogs(true)
+                .then(() => {
+                    // 添加滚动到底部
+                    setTimeout(() => {
+                        scrollToBottom();
+                    }, 100);
+                    setupEventSource();
+                })
+                .catch(error => {
+                    console.error('Initial log load failed, starting SSE without last_id', error);
+                    setupEventSource();
+                });
         }
-        
+
         // Fetch module hierarchy
         function fetchModuleHierarchy() {
             fetch('/logger/api/modules')
@@ -644,7 +689,8 @@ LOGGER_VIEWER = """
                     return response.json();
                 })
                 .then(data => {
-                    renderModuleTree(data.hierarchy);
+                    moduleHierarchy = data.hierarchy;
+                    renderModuleTree(moduleHierarchy);
                 })
                 .catch(error => {
                     console.error('Error fetching module hierarchy:', error);
@@ -652,22 +698,22 @@ LOGGER_VIEWER = """
                         '<div class="text-center text-danger">Error loading modules</div>';
                 });
         }
-        
+
         // Refresh modules
         function refreshModules() {
             const moduleTree = document.getElementById('moduleTree');
             moduleTree.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Refreshing modules...</div>';
-            
+
             fetchModuleHierarchy();
         }
-        
+
         // Render module tree with checkboxes
         function renderModuleTree(hierarchy) {
             const treeContainer = document.getElementById('moduleTree');
-            
+
             // Clear existing content
             treeContainer.innerHTML = '';
-            
+
             // Create select all/none buttons
             const buttonGroup = document.createElement('div');
             buttonGroup.className = 'btn-group w-100 mb-2';
@@ -676,47 +722,55 @@ LOGGER_VIEWER = """
                 <button class="btn btn-sm btn-outline-secondary" onclick="deselectAllModules()">Select None</button>
             `;
             treeContainer.appendChild(buttonGroup);
-            
+
             // Create module list container
             const moduleList = document.createElement('div');
             moduleList.className = 'module-list';
             moduleList.style.maxHeight = '250px';
             moduleList.style.overflowY = 'auto';
-            
+
             // Function to recursively render modules
-            function renderModules(modules, parentKey = 'root', level = 0) {
-                const children = hierarchy[parentKey] || [];
+            function renderModules(parent, level = 0) {
+                const children = hierarchy[parent] || [];
                 if (children.length === 0) return '';
-                
+
                 let html = '';
                 children.forEach(module => {
                     const indent = level * 20;
                     html += `
-                        <div class="form-check" style="margin-left: ${indent}px;">
-                            <input class="form-check-input module-checkbox" type="checkbox" value="${module}" id="module-${module}">
-                            <label class="form-check-label" for="module-${module}" title="${module}">
-                                ${module.split('.').pop() || module}
-                            </label>
-                        </div>
+                        <div class="module-item" style="margin-left: ${indent}px;">
+                            <div class="module-label">
+                                <input class="form-check-input module-checkbox" type="checkbox" value="${module}" id="module-${module}">
+                                <label class="form-check-label" for="module-${module}" title="${module}">
+                                    ${module.split('.').pop() || module}
+                                </label>
+                            </div>
                     `;
+
                     // Recursively render child modules
-                    html += renderModules(modules, module, level + 1);
+                    const childHtml = renderModules(module, level + 1);
+                    if (childHtml) {
+                        html += `<div class="module-children">${childHtml}</div>`;
+                    }
+
+                    html += `</div>`;
                 });
-                
+
                 return html;
             }
-            
-            moduleList.innerHTML = renderModules(hierarchy);
+
+            // Start rendering from root
+            moduleList.innerHTML = renderModules('root');
             treeContainer.appendChild(moduleList);
-            
+
             // Add event listeners to checkboxes
             document.querySelectorAll('.module-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', updateSelectedModules);
             });
-            
+
             updateSelectedModules();
         }
-        
+
         // Select all modules
         function selectAllModules() {
             document.querySelectorAll('.module-checkbox').forEach(checkbox => {
@@ -724,7 +778,7 @@ LOGGER_VIEWER = """
             });
             updateSelectedModules();
         }
-        
+
         // Deselect all modules
         function deselectAllModules() {
             document.querySelectorAll('.module-checkbox').forEach(checkbox => {
@@ -732,128 +786,162 @@ LOGGER_VIEWER = """
             });
             updateSelectedModules();
         }
-        
+
         // Update selected modules array
         function updateSelectedModules() {
             selectedModules = Array.from(document.querySelectorAll('.module-checkbox:checked'))
                 .map(checkbox => checkbox.value);
             console.log('Selected modules:', selectedModules);
         }
-        
+
         // Apply filters and reload logs
         function applyFilters() {
             updateSelectedLevels();
             updateSelectedModules();
             updateFilterStatus();
-            fetchLogs(true);
-        }
-        
-        // Fetch logs with current filters
-        function fetchLogs(reset = false) {
-            if (isLoading) {
-                console.log('Already loading logs, skipping request');
-                return;
+
+            // Close existing SSE connection
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
             }
-            
-            if (reset) {
-                currentStart = 0;
-                hasMoreLogs = true;
-            }
-            
-            if (!hasMoreLogs) {
-                console.log('No more logs to load');
-                return;
-            }
-            
-            isLoading = true;
-            document.getElementById('loadStatus').textContent = 'Loading...';
-            
-            // Show loading indicator for initial load
-            if (reset) {
-                document.getElementById('initialLoading').style.display = 'block';
-            }
-            
-            // Build query parameters
-            const params = new URLSearchParams({
-                start: currentStart,
-                limit: currentLimit
-            });
-            
-            // Add level filters
-            selectedLevels.forEach(level => {
-                params.append('level[]', level);
-            });
-            
-            // Add module filters
-            selectedModules.forEach(module => {
-                params.append('module[]', module);
-            });
-            
-            console.log('Fetching logs with params:', params.toString());
-            
-            fetch('/logger/api/logs?' + params.toString())
-                .then(response => {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Received logs data:', data);
-                    
-                    if (reset) {
-                        document.getElementById('logEntries').innerHTML = 
-                            '<div class="scroll-observer" id="scrollObserver"></div>';
-                    }
-                    
-                    const filteredLogs = filterLogs(data.logs);
-                    renderLogs(filteredLogs, reset);
-                    
-                    currentStart += filteredLogs.length;
-                    hasMoreLogs = data.hasMore;
-                    totalEntries = data.total;
-                    
-                    // Update entry count
-                    document.getElementById('entryCount').textContent = 
-                        `${data.total.toLocaleString()} Entries`;
-                    document.getElementById('mainEntryCount').textContent = 
-                        `${data.total.toLocaleString()} Entries`;
-                    
-                    isLoading = false;
-                    document.getElementById('loadStatus').textContent = '';
-                    
-                    const initialLoadingElement = document.getElementById('initialLoading');
-                    if (initialLoadingElement) {
-                        initialLoadingElement.style.display = 'none';
-                    } else {
-                        console.error('Error: Element with ID "initialLoading" was not found in the DOM.');
-                    }
-                    
-                    // Re-setup observer after DOM update
-                    if (observer) {
-                        observer.disconnect();
-                        const observerElement = document.getElementById('scrollObserver');
-                        if (observerElement) {
-                            observer.observe(observerElement);
-                        }
-                    }
+
+            // Reload logs with new filters
+            fetchLogs(true)
+                .then(() => {
+                    setupEventSource();
                 })
                 .catch(error => {
-                    console.error('Error fetching logs:', error);
-                    isLoading = false;
-                    document.getElementById('loadStatus').textContent = 'Error loading logs';
-                    const initialLoadingElement = document.getElementById('initialLoading');
-                    if (initialLoadingElement) {
-                        initialLoadingElement.style.display = 'none';
-                    } else {
-                        console.error('Error: Element with ID "initialLoading" was not found in the DOM.');
-                    }
+                    console.error('Error fetching logs after filter change', error);
+                    setupEventSource();
                 });
         }
-        
+
+        // Update filter status display
+        function updateFilterStatus() {
+            const levelText = selectedLevels.length === 5 ? 'ALL' : selectedLevels.join(', ');
+            const moduleText = selectedModules.length > 0 ? ` | Modules: ${selectedModules.length}` : '';
+            document.getElementById('filterStatus').textContent = levelText + moduleText;
+        }
+
+        // Fetch logs with current filters (returns Promise)
+        function fetchLogs(reset = false) {
+            return new Promise((resolve, reject) => {
+                if (isLoading) {
+                    console.log('Already loading logs, skipping request');
+                    reject('Already loading logs');
+                    return;
+                }
+
+                if (reset) {
+                    currentStart = 0;
+                    hasMoreLogs = true;
+                }
+
+                if (!hasMoreLogs) {
+                    console.log('No more logs to load');
+                    reject('No more logs to load');
+                    return;
+                }
+
+                isLoading = true;
+                document.getElementById('loadStatus').textContent = 'Loading...';
+
+                // Show loading indicator for initial load
+                if (reset) {
+                    document.getElementById('initialLoading').style.display = 'block';
+                }
+
+                // Build query parameters
+                const params = new URLSearchParams({
+                    start: currentStart,
+                    limit: currentLimit
+                });
+
+                // Add level filters
+                selectedLevels.forEach(level => {
+                    params.append('level[]', level);
+                });
+
+                // Add module filters
+                selectedModules.forEach(module => {
+                    params.append('module[]', module);
+                });
+
+                console.log('Fetching logs with params:', params.toString());
+
+                fetch('/logger/api/logs?' + params.toString())
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Received logs data:', data);
+
+                        if (reset) {
+                            document.getElementById('logEntries').innerHTML = 
+                                '<div class="scroll-observer" id="scrollObserver"></div>';
+                        }
+
+                        renderLogs(data.logs, reset);
+
+                        currentStart += data.logs.length;
+                        hasMoreLogs = data.hasMore;
+                        totalEntries = data.total;
+
+                        // Update entry count
+                        document.getElementById('entryCount').textContent = 
+                            `${data.total.toLocaleString()} Entries`;
+                        document.getElementById('mainEntryCount').textContent = 
+                            `${data.total.toLocaleString()} Entries`;
+
+                        // Set lastReceivedId to the highest ID in the loaded logs
+                        if (reset && data.logs.length > 0) {
+                            lastReceivedId = data.logs[data.logs.length - 1]._id;
+                            console.log('Set lastReceivedId to', lastReceivedId);
+                        }
+
+                        isLoading = false;
+                        document.getElementById('loadStatus').textContent = '';
+
+                        const initialLoadingElement = document.getElementById('initialLoading');
+                        if (initialLoadingElement) {
+                            initialLoadingElement.style.display = 'none';
+                        } else {
+                            console.error('Error: Element with ID "initialLoading" was not found in the DOM.');
+                        }
+
+                        // Re-setup observer after DOM update
+                        if (observer) {
+                            observer.disconnect();
+                            const observerElement = document.getElementById('scrollObserver');
+                            if (observerElement) {
+                                observer.observe(observerElement);
+                            }
+                        }
+
+                        resolve(data);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching logs:', error);
+                        isLoading = false;
+                        document.getElementById('loadStatus').textContent = 'Error loading logs';
+                        const initialLoadingElement = document.getElementById('initialLoading');
+                        if (initialLoadingElement) {
+                            initialLoadingElement.style.display = 'none';
+                        } else {
+                            console.error('Error: Element with ID "initialLoading" was not found in the DOM.');
+                        }
+                        reject(error);
+                    });
+            });
+        }
+
         // 更新加载状态
         function updateLoadStatus(message, type = 'info') {
             const statusElement = document.getElementById('loadStatus');
             statusElement.textContent = message;
-            
+
             // 根据类型设置颜色
             statusElement.className = '';
             if (type === 'error') {
@@ -864,85 +952,99 @@ LOGGER_VIEWER = """
                 statusElement.classList.add('text-muted');
             }
         }
-        
+
         // 更新连接状态
         function updateConnectionStatus(status) {
             const statusElement = document.getElementById('connectionStatus');
             const collapsedStatusElement = document.getElementById('collapsedConnectionStatus');
-            
+
             statusElement.className = 'status-indicator';
             collapsedStatusElement.className = 'status-indicator';
-            
+
             switch(status) {
                 case 'connected':
                     statusElement.classList.add('status-connected');
-                    statusElement.innerHTML = '<span class="dot"></span><span>已连接</span>';
+                    statusElement.innerHTML = '<span class="dot"></span><span>Connected</span>';
                     collapsedStatusElement.classList.add('status-connected');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>已连接</span>';
+                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Connected</span>';
                     break;
                 case 'connecting':
                     statusElement.classList.add('status-connecting');
-                    statusElement.innerHTML = '<span class="dot"></span><span>连接中...</span>';
+                    statusElement.innerHTML = '<span class="dot"></span><span>Connecting...</span>';
                     collapsedStatusElement.classList.add('status-connecting');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>连接中...</span>';
+                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Connecting...</span>';
                     break;
                 case 'disconnected':
                     statusElement.classList.add('status-disconnected');
-                    statusElement.innerHTML = '<span class="dot"></span><span>已断开</span>';
+                    statusElement.innerHTML = '<span class="dot"></span><span>Disconnected</span>';
                     collapsedStatusElement.classList.add('status-disconnected');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>已断开</span>';
+                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Disconnected</span>';
                     break;
                 case 'error':
                     statusElement.classList.add('status-disconnected');
-                    statusElement.innerHTML = '<span class="dot"></span><span>连接错误</span>';
+                    statusElement.innerHTML = '<span class="dot"></span><span>Connection Error</span>';
                     collapsedStatusElement.classList.add('status-disconnected');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>连接错误</span>';
+                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Connection Error</span>';
                     break;
             }
         }
-        
+
         // 设置事件源（Server-Sent Events）
         function setupEventSource() {
             if (eventSource) {
                 eventSource.close();
             }
-            
+
             updateConnectionStatus('connecting');
-            
+
+            // Build query parameters with last_id and filters
             const params = new URLSearchParams();
-            selectedLevels.forEach(level => params.append('level[]', level));
-            selectedModules.forEach(module => params.append('module[]', module));
-            
-            eventSource = new EventSource('/logger/api/stream?' + params.toString());
-            
+            params.append('last_id', lastReceivedId);
+
+            selectedLevels.forEach(level => {
+                params.append('level[]', level);
+            });
+
+            selectedModules.forEach(module => {
+                params.append('module[]', module);
+            });
+
+            const url = `/logger/api/stream?${params.toString()}`;
+            console.log('Setting up SSE with URL:', url);
+
+            eventSource = new EventSource(url);
+
             eventSource.addEventListener('open', () => {
-                console.log('SSE连接已建立');
+                console.log('SSE connection established');
                 updateConnectionStatus('connected');
             });
-            
+
             eventSource.addEventListener('error', (err) => {
-                console.error('SSE连接错误:', err);
+                console.error('SSE connection error:', err);
                 updateConnectionStatus('error');
-                // 尝试重新连接
+                // Try to reconnect
                 setTimeout(setupEventSource, 5000);
             });
-            
+
             eventSource.onopen = function() {
                 console.log('SSE连接已建立');
                 updateConnectionStatus('connected');
                 updateLoadStatus('实时更新中');
             };
-            
+
             eventSource.onmessage = function(event) {
                 if (!document.getElementById('autoRefresh').checked) return;
-                
+
                 try {
                     const log = JSON.parse(event.data);
-                    
+
+                    // Update lastReceivedId regardless of visibility
+                    lastReceivedId = log._id;
+
                     if (isLogVisible(log, selectedLevels, selectedModules)) {
                         addNewLogEntry(log);
-                        
-                        // 更新统计信息
+
+                        // Update statistics
                         totalEntries++;
                         document.getElementById('entryCount').textContent = 
                             `${totalEntries.toLocaleString()} Entries`;
@@ -950,32 +1052,17 @@ LOGGER_VIEWER = """
                             `${totalEntries.toLocaleString()} Entries`;
                     }
                 } catch (error) {
-                    console.error('解析SSE消息错误:', error);
-                }
-            };
-            
-            eventSource.onerror = function(error) {
-                console.error('SSE连接错误:', error);
-                
-                if (eventSource.readyState === EventSource.CLOSED) {
-                    updateConnectionStatus('disconnected');
-                    updateLoadStatus('连接已关闭，5秒后重试...');
-                    
-                    // 5秒后重试连接
-                    setTimeout(setupEventSource, 5000);
-                } else {
-                    updateConnectionStatus('error');
-                    updateLoadStatus('连接错误，尝试重试...', 'error');
+                    console.error('Error parsing SSE message:', error);
                 }
             };
         }
-        
-        function isLogVisible(log, levels, modules) {
-            const levelMatch = levels.includes(log.levelname);
-            const moduleMatch = modules.length === 0 || modules.includes(log.module);
+
+        function isLogVisible(log) {
+            const levelMatch = selectedLevels.includes(log.levelname);
+            const moduleMatch = selectedModules.length === 0 || selectedModules.includes(log.module);
             return levelMatch && moduleMatch;
         }
-        
+
         function filterLogs(logs) {
             return logs.filter(log => {
                 const levelMatch = selectedLevels.includes(log.levelname);
@@ -984,72 +1071,74 @@ LOGGER_VIEWER = """
                 return levelMatch && moduleMatch;
             });
         }
-        
+
         function updateFilterStatus() {
             const statusText = `${selectedLevels.join(', ')} ${selectedModules.length > 0 ? '| Modules: ' + selectedModules.join(', ') : ''}`;
             document.getElementById('filterStatus').textContent = statusText;
         }
-        
+
         // 添加新的日志条目
         function addNewLogEntry(log) {
-            if (!isLogVisible(log, selectedLevels, selectedModules)) {
+            if (!isLogVisible(log)) {
                 return;
             }
-    
+
             const container = document.getElementById('logEntries');
             const logElement = createLogElement(log);
-            
+
             // 添加到容器
             container.appendChild(logElement);
-            
+
             // 如果自动滚动启用且用户接近底部，滚动到底部
             if (autoScrollEnabled && isNearBottom) {
                 setTimeout(() => {
                     scrollToBottom();
                 }, 50);
             }
-            
+
             // 移除初始加载提示（如果存在）
             document.getElementById('initialLoading').style.display = 'none';
         }
-        
+
         // 创建日志元素
         function createLogElement(log) {
             const logElement = document.createElement('div');
             logElement.className = `log-entry log-level-${log.levelname}`;
-            
+
             let html = `<span class="timestamp">${log.asctime}</span>`;
             html += `<span class="level-badge badge-${log.levelname}">${log.levelname}</span>`;
-            
+
             if (log.module) {
                 html += `<span class="module" title="${log.module}">${log.module}</span>`;
             }
-            
+
             html += `<span>${log.message}</span>`;
-            
+
             if (log.funcName) {
                 html += ` <small class="text-muted">(${log.funcName})</small>`;
             }
-            
+
             logElement.innerHTML = html;
             return logElement;
         }
-        
+
         // 渲染日志
         function renderLogs(logs, reset = false) {
             const container = document.getElementById('logEntries');
-            
+
             if (reset) {
                 container.innerHTML = '';
             }
-            
+
             const fragment = document.createDocumentFragment();
-            
+
             logs.forEach(log => {
-                const logElement = createLogElement(log);
-                fragment.appendChild(logElement);
+                if (isLogVisible(log)) {
+                    const logElement = createLogElement(log);
+                    fragment.appendChild(logElement);
+                }
             });
-            
+
             if (reset) {
                 container.appendChild(fragment);
             } else {
@@ -1057,27 +1146,27 @@ LOGGER_VIEWER = """
                 const firstChild = container.firstChild;
                 container.insertBefore(fragment, firstChild);
             }
-            
+
             // 添加滚动观察器（如果不存在）
             if (!document.getElementById('scrollObserver')) {
                 const observerElement = document.createElement('div');
                 observerElement.className = 'scroll-observer';
                 observerElement.id = 'scrollObserver';
                 container.appendChild(observerElement);
-                
+
                 if (observer) {
                     observer.observe(observerElement);
                 }
             }
         }
-        
+
         // Load more logs when scrolling up
         function loadMoreLogs() {
             if (!isLoading && hasMoreLogs) {
                 fetchLogs(false);
             }
         }
-        
+
         // Update statistics panel
         function updateStats() {
             fetch('/logger/api/stats')
@@ -1094,7 +1183,7 @@ LOGGER_VIEWER = """
                         <div class="stats-item">
                             <strong>Level Distribution:</strong>
                     `;
-                    
+
                     for (const [level, count] of Object.entries(data.levelCounts)) {
                         const percentage = data.totalEntries > 0 ? 
                             ((count / data.totalEntries) * 100).toFixed(1) : 0;
@@ -1105,9 +1194,28 @@ LOGGER_VIEWER = """
                             </div>
                         `;
                     }
-                    
+
                     html += `</div>`;
-                    
+
+                    // Add module statistics if available
+                    if (data.moduleCounts) {
+                        html += `<div class="stats-item"><strong>Top Modules:</strong></div>`;
+                        const sortedModules = Object.entries(data.moduleCounts)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 5); // Show top 5 modules
+
+                        sortedModules.forEach(([module, count]) => {
+                            const percentage = data.totalEntries > 0 ? 
+                                ((count / data.totalEntries) * 100).toFixed(1) : 0;
+                            html += `
+                                <div class="stats-item">
+                                    <span>${module}:</span>
+                                    <span class="stats-value">${count.toLocaleString()} (${percentage}%)</span>
+                                </div>
+                            `;
+                        });
+                    }
+
                     document.getElementById('statsPanel').innerHTML = html;
                 })
                 .catch(error => {

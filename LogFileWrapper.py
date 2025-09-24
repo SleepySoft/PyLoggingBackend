@@ -3,37 +3,14 @@ import time
 import json
 import itertools
 import threading
-from collections import deque
-from typing import List, Dict, Any, Deque, Tuple, Optional
-
-
-class LogSession:
-    """Represents a client session for reading log entries"""
-
-    def __init__(self, start_index: int, generation: int):
-        self.start_entry_index = start_index
-        self.current_entry_offset = 0
-        self.generation = generation
-
-    def advance_offset(self, delta: int):
-        """Advance the read offset by specified delta"""
-        self.current_entry_offset += delta
-
-    def reset(self, new_index: int, new_generation: int):
-        """Reset session to new starting position"""
-        self.start_entry_index = new_index
-        self.current_entry_offset = 0
-        self.generation = new_generation
-
-    def end_position(self) -> int:
-        """Calculate current end position of the session"""
-        return self.start_entry_index + self.current_entry_offset
+from collections import deque, defaultdict
+from typing import List, Dict, Any, Deque, Tuple, Optional, Callable
 
 
 class LogFileWrapper:
     """
     Monitors, analyzes and caches log file content with rotation handling.
-    Provides indexed access to log entries with session-based reading.
+    Provides indexed access to log entries using _id field.
     """
 
     def __init__(self, file_path: str, limit: int = 10000):
@@ -47,14 +24,16 @@ class LogFileWrapper:
         self.file_path = file_path
         self.limit = limit
         self.log_entries: Deque[Dict[str, Any]] = deque(maxlen=limit)
-        self.last_entry_index = -1
+        self.next_id = 0  # Next available _id for new log entries
         self.file_position = 0
-        self.generation = 0
         self.lock = threading.RLock()
         self._monitor_running = True
         self._file_id: Optional[Tuple[int, int]] = None  # (dev, inode)
         self._no_changes_count = 0
         self._sleep_duration = 0.1
+
+        self.module_hierarchy = defaultdict(set)
+        self.seen_modules = set()
 
         # Initialize with existing file content
         self._load_initial_entries()
@@ -100,7 +79,7 @@ class LogFileWrapper:
             self._file_id = None
 
     def _append_log_entries(self, lines: List[str]) -> None:
-        """Append multiple log entries to cache"""
+        """Append multiple log entries to cache with _id"""
         if not lines:
             return
 
@@ -109,15 +88,23 @@ class LogFileWrapper:
             try:
                 # Try to parse as JSON, fallback to raw text
                 try:
-                    entries.append(json.loads(line))
+                    entry = json.loads(line)
+                    module = entry.get('module', '')
+                    name = entry.get('name', '')
+                    if module:
+                        self._update_module_hierarchy(module + '.' + name)
                 except json.JSONDecodeError:
-                    entries.append({"raw": line, "timestamp": time.time()})
+                    entry = {"raw": line, "timestamp": time.time()}
+
+                # Add unique _id to each entry
+                entry['_id'] = self.next_id
+                self.next_id += 1
+                entries.append(entry)
             except Exception as e:
                 print(f"Error processing log line: {e}")
 
         with self.lock:
             self.log_entries.extend(entries)
-            self.last_entry_index += len(entries)
 
     def _check_rotation(self) -> bool:
         """Check if file rotation has occurred"""
@@ -134,9 +121,7 @@ class LogFileWrapper:
     def _handle_rotation(self) -> None:
         """Handle file rotation scenario"""
         with self.lock:
-            self.generation += 1
             self.log_entries.clear()
-            self.last_entry_index = -1
             self.file_position = 0
             self._update_file_id()
 
@@ -152,9 +137,7 @@ class LogFileWrapper:
                 # Handle file disappearance
                 if not os.path.exists(self.file_path):
                     with self.lock:
-                        self.generation += 1
                         self.log_entries.clear()
-                        self.last_entry_index = -1
                         self.file_position = 0
                         self._file_id = None
                     time.sleep(5)
@@ -193,6 +176,22 @@ class LogFileWrapper:
                 print(f"File monitoring error: {e}")
                 time.sleep(5)
 
+    def _update_module_hierarchy(self, module_path: str):
+        """Update module hierarchy with deduplication"""
+        if module_path in self.seen_modules:
+            return
+
+        self.seen_modules.add(module_path)
+        parts = module_path.split('.')
+        for i in range(1, len(parts) + 1):
+            parent = '.'.join(parts[:i - 1]) if i > 1 else 'root'
+            child = '.'.join(parts[:i])
+            self.module_hierarchy[parent].add(child)
+
+    def get_module_hierarchy(self) -> dict:
+        with self.lock:
+            return self.module_hierarchy.copy()
+
     def stop_monitoring(self) -> None:
         """Stop monitoring thread gracefully"""
         self._monitor_running = False
@@ -203,80 +202,91 @@ class LogFileWrapper:
         except Exception as e:
             print(f"Error stopping monitoring thread: {e}")
 
-    def get_start_session(self) -> LogSession:
-        """Create new session for reading logs"""
-        with self.lock:
-            return LogSession(
-                start_index=self.last_entry_index,
-                generation=self.generation
-            )
+    def get_logs(self, start_id: int, count: int,
+                 filter_func: Optional[Callable[[Dict], bool]] = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve log entries starting from specified _id
 
-    def has_updates(self, session: LogSession) -> bool:
-        """Check if new entries exist since session creation"""
-        with self.lock:
-            return self.last_entry_index > session.end_position()
+        Args:
+            start_id: Minimum _id to return (inclusive)
+            count: Maximum number of entries to return
+            filter_func: Optional filter function to apply to entries
 
-    def get_historical_logs(self, session: LogSession, offset: int, count: int) -> List[Dict[str, Any]]:
-        """Get historical log entries relative to session start"""
-        self._recover_session(session)
-        requested_index = session.start_entry_index + offset + 1
-
+        Returns:
+            List of log entries matching criteria
+        """
         with self.lock:
             if not self.log_entries:
                 return []
 
-            # Calculate valid range
-            oldest_index = max(0, self.last_entry_index - len(self.log_entries) + 1)
-            if requested_index < oldest_index or requested_index > self.last_entry_index:
-                return []
+            # Find starting position in deque
+            start_index = 0
+            for i, entry in enumerate(self.log_entries):
+                if entry['_id'] >= start_id:
+                    start_index = i
+                    break
+            else:
+                return []  # No entries match start_id
 
-            # Convert to deque index
-            entries_index = requested_index - oldest_index
-            return self._get_logs_by_index(entries_index, count)
-
-    def get_realtime_logs(self, session: LogSession, count: int) -> List[Dict[str, Any]]:
-        """Get new log entries since last read in session"""
-        self._recover_session(session)
-        current_read_position = session.end_position()
-
-        with self.lock:
-            if not self.log_entries or current_read_position >= self.last_entry_index:
-                return []
-
-            # Calculate valid range
-            oldest_index = max(0, self.last_entry_index - len(self.log_entries) + 1)
-            new_entries_count = min(
-                count,
-                self.last_entry_index - current_read_position,
-                len(self.log_entries) - (current_read_position - oldest_index)
-            )
-
-            if new_entries_count <= 0:
-                return []
-
-            # Get entries and update session
-            entries_index = current_read_position - oldest_index
-            result = self._get_logs_by_index(entries_index, new_entries_count)
-            session.advance_offset(new_entries_count)
+            # Collect matching entries
+            result = []
+            for entry in itertools.islice(self.log_entries, start_index, None):
+                if len(result) >= count:
+                    break
+                if filter_func is None or filter_func(entry):
+                    result.append(entry)
             return result
 
-    def _get_logs_by_index(self, start_index: int, count: int = 100) -> List[Dict[str, Any]]:
-        """Retrieve log entries by deque index"""
+    def get_total_count(self, filter_func: Optional[Callable[[Dict], bool]] = None) -> int:
+        """
+        Get total number of log entries matching filter
+
+        Args:
+            filter_func: Optional filter function to apply
+
+        Returns:
+            Count of matching entries
+        """
+        with self.lock:
+            if filter_func is None:
+                return len(self.log_entries)
+            return sum(1 for entry in self.log_entries if filter_func(entry))
+
+    def check_updates(self, current_id: int) -> Dict[str, Any]:
+        """
+        Check if new logs are available since specified _id
+
+        Args:
+            current_id: Last known _id by client
+
+        Returns:
+            Dictionary with update information:
+            {
+                'has_updates': bool,
+                'new_count': int,
+                'min_id': int,
+                'max_id': int
+            }
+        """
         with self.lock:
             if not self.log_entries:
-                return []
+                return {
+                    'has_updates': False,
+                    'new_count': 0,
+                    'min_id': 0,
+                    'max_id': 0
+                }
 
-            end_index = min(len(self.log_entries), start_index + count)
-            return list(itertools.islice(self.log_entries, start_index, end_index))
+            min_id = self.log_entries[0]['_id']
+            max_id = self.log_entries[-1]['_id']
+            new_count = max(0, max_id - max(min_id - 1, current_id))
 
-    def _recover_session(self, session: LogSession) -> None:
-        """Reset session if file rotation occurred"""
-        with self.lock:
-            if session.generation != self.generation:
-                session.reset(
-                    new_index=self.last_entry_index,
-                    new_generation=self.generation
-                )
+            return {
+                'has_updates': new_count > 0,
+                'new_count': new_count,
+                'min_id': min_id,
+                'max_id': max_id
+            }
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -294,37 +304,32 @@ def main():
     LOG_FILE = "application.log"
     MONITOR_INTERVAL = 0.1  # Check for new logs every second
 
-    # # Start log writer simulation in a separate thread
-    # writer_thread = threading.Thread(
-    #     target=simulate_log_writer,
-    #     args=(LOG_FILE,),
-    #     daemon=True
-    # )
-    # writer_thread.start()
-    #
-    # logging.info(f"Starting log monitor for file: {LOG_FILE}")
-
     # Create log monitor instance
     log_monitor = LogFileWrapper(LOG_FILE, limit=1000)
 
     try:
-        # Create a session for reading logs
-        session = log_monitor.get_start_session()
-        # logging.info(f"Created new log session starting at index {session.start_entry_index}")
-
-        logs = log_monitor.get_historical_logs(session, -1000, 1000)
+        # Get initial logs
+        current_id = -1
+        logs = log_monitor.get_logs(start_id=0, count=1000)
         for log in logs:
             print_log(log)
+            current_id = max(current_id, log['_id'])
 
         # Main monitoring loop
         while True:
-            # Check for new logs
-            new_logs = log_monitor.get_realtime_logs(session, count=100)
+            # Check for updates
+            update_info = log_monitor.check_updates(current_id)
 
-            if new_logs:
-                # print(f"Found {len(new_logs)} new log entries:")
-                for i, log in enumerate(new_logs):
+            if update_info['has_updates']:
+                # Get new logs since last known id
+                new_logs = log_monitor.get_logs(
+                    start_id=current_id + 1,
+                    count=update_info['new_count']
+                )
+
+                for log in new_logs:
                     print_log(log)
+                    current_id = max(current_id, log['_id'])
 
             # Wait before next check
             time.sleep(MONITOR_INTERVAL)

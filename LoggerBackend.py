@@ -1,45 +1,30 @@
 import os
 import time
 import json
-import threading
 import traceback
+import threading
 from collections import defaultdict
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, session
 from flask_cors import CORS
 
 from LoggerViewerTemplate import LOGGER_VIEWER
-from LogFileWrapper import LogFileWrapper  # Import the LogFileWrapper class
+from LogFileWrapper import LogFileWrapper  # Import the updated LogFileWrapper class
 
 
 class LoggerBackend:
-    LIMIT_BY_LINE = 1
-    LIMIT_BY_SIZE = 2
-
-    def __init__(self, monitoring_file_path: str, cache_limit_by: int, cache_limit_count: int):
+    def __init__(self, monitoring_file_path: str, cache_limit_count: int):
         self.log_file = monitoring_file_path
-        self.cache_limit_by = cache_limit_by
         self.cache_limit_count = cache_limit_count
-        self.log_revision = 0
         self.last_validation_time = time.time()
         self.flask_thread = None
         self.app = None
-
-        # Initialize data structures
-        self.module_hierarchy = defaultdict(set)
-        self.level_index = defaultdict(list)
-        self.module_index = defaultdict(list)
         self.cache_lock = threading.Lock()
-        self.seen_modules = set()
 
         # Use LogFileWrapper for file monitoring and log storage
-        self.log_wrapper = LogFileWrapper(
-            file_path=monitoring_file_path,
-            limit=cache_limit_count if cache_limit_by == self.LIMIT_BY_LINE else 0
-        )
+        self.log_wrapper = LogFileWrapper(file_path=monitoring_file_path, limit=cache_limit_count)
 
-        # Start processing thread to handle new log entries
-        self.processing_thread = threading.Thread(target=self._process_new_entries, daemon=True)
-        self.processing_thread.start()
+        # Track last processed ID for background processing
+        self.last_processed_id = -1
 
     def start_service(self, host: str = '0.0.0.0', port: int = 5000, blocking: bool = False):
         """
@@ -52,6 +37,7 @@ class LoggerBackend:
                      if False, runs in background thread
         """
         self.app = Flask(__name__)
+        self.app.secret_key = os.urandom(24)  # Secret key for session management
         CORS(self.app)
         self._register_routes()
 
@@ -79,11 +65,12 @@ class LoggerBackend:
 
             # Wait briefly for server initialization
             time.sleep(1)
-            print(f"Logger viewer is running on http://{host}:{port}/logger/log_viewer")
+            print(f"Flask server running in background on http://{host}:{port}")
 
     def register_router(self, app: Flask) -> bool:
         if not self.app:
             self.app = app
+            self.app.secret_key = os.urandom(24)  # Secret key for session management
             CORS(self.app)
             self._register_routes()
             return True
@@ -98,159 +85,90 @@ class LoggerBackend:
         self.app.add_url_rule('/logger/api/stats', 'get_log_stats', self.get_log_stats, methods=['GET'])
         self.app.add_url_rule('/logger/api/stream', 'stream_logs', self.stream_logs)
 
-    def _process_log_entry(self, log_entry: dict):
-        """Index a single log entry"""
-        with self.cache_lock:
-            self.log_revision += 1
-
-            # Update indexes
-            level = log_entry.get('levelname', 'UNKNOWN')
-            module = log_entry.get('module', '')
-
-            self.level_index[level].append(log_entry)
-            if module:
-                self.module_index[module].append(log_entry)
-                self._update_module_hierarchy(module)
-
-    def _update_module_hierarchy(self, module_path: str):
-        """Update module hierarchy with deduplication"""
-        if module_path in self.seen_modules:
-            return
-
-        self.seen_modules.add(module_path)
-        parts = module_path.split('.')
-        for i in range(1, len(parts) + 1):
-            parent = '.'.join(parts[:i - 1]) if i > 1 else 'root'
-            child = '.'.join(parts[:i])
-            self.module_hierarchy[parent].add(child)
-
-    def _process_new_entries(self):
-        """Background thread to process new log entries from LogFileWrapper"""
-        # Create a session to track new entries
-        session = self.log_wrapper.get_start_session()
-
-        while True:
-            try:
-                # Get new log entries since last check
-                new_entries = self.log_wrapper.get_realtime_logs(session, 100)
-
-                if new_entries:
-                    for entry in new_entries:
-                        self._process_log_entry(entry)
-
-                # Periodic cache validation (every 60s)
-                current_time = time.time()
-                if current_time - self.last_validation_time > 60:
-                    self._validate_cache_consistency()
-                    self.last_validation_time = current_time
-
-                time.sleep(0.1)
-            except Exception as e:
-                print(f"Processing error: {e}")
-                time.sleep(5)
-
-    def _validate_cache_consistency(self):
-        """Ensure cache and indexes remain synchronized"""
-        with self.cache_lock:
-            # Check if indexes match the number of entries in LogFileWrapper
-            level_index_count = sum(len(v) for v in self.level_index.values())
-            module_index_count = sum(len(v) for v in self.module_index.values())
-            log_wrapper_count = len(self.log_wrapper.log_entries)
-
-            if log_wrapper_count != level_index_count or log_wrapper_count != module_index_count:
-                self._rebuild_indexes()
-
-    def _rebuild_indexes(self):
-        """Reconstruct indexes from LogFileWrapper after inconsistency"""
-        with self.cache_lock:
-            self.level_index.clear()
-            self.module_index.clear()
-            self.module_hierarchy.clear()
-            self.seen_modules.clear()
-            self.log_revision = 0
-
-            # Rebuild indexes from all entries in LogFileWrapper
-            for log in self.log_wrapper.log_entries:
-                self._process_log_entry(log)
-
     # ------------------------------------------ Web Service ------------------------------------------
 
     def log_viewer(self):
         return LOGGER_VIEWER
 
+    def get_module_hierarchy(self):
+        with self.cache_lock:
+            module_hierarchy = self.log_wrapper.get_module_hierarchy()
+            return jsonify({
+                'hierarchy': {k: list(v) for k, v in module_hierarchy.items()},
+            })
+
+    def get_log_stats(self):
+        # Get all entries with filtering applied
+        total_entries = self.log_wrapper.get_total_count()
+        logs = self.log_wrapper.get_logs(
+            start_id=0,
+            count=total_entries
+        )
+
+        # Calculate statistics
+        level_counts = defaultdict(int)
+        module_counts = defaultdict(int)
+
+        for entry in logs:
+            level = entry.get('levelname', 'UNKNOWN')
+            module = entry.get('module', '')
+
+            level_counts[level] += 1
+            if module:
+                module_counts[module] += 1
+
+        return jsonify({
+            'totalEntries': total_entries,
+            'levelCounts': level_counts,
+            'moduleCounts': module_counts,
+        })
+
     def get_logs(self):
-        """Get logs with filtering and pagination"""
+        """Get logs with filtering and pagination using _id"""
         try:
             start = int(request.args.get('start', 0))
             limit = int(request.args.get('limit', 100))
             level_filter = request.args.getlist('level[]')
             module_filter = request.args.getlist('module[]')
-            revision = int(request.args.get('revision', 0))
 
-            with self.cache_lock:
-                # Return empty if client has latest revision
-                if revision >= self.log_revision:
-                    return jsonify({
-                        'logs': [],
-                        'total': len(self.log_wrapper.log_entries),
-                        'start': start,
-                        'limit': limit,
-                        'revision': self.log_revision,
-                        'hasMore': False
-                    })
+            # Get total number of entries
+            total_entries = self.log_wrapper.get_total_count()
 
-                # Get all entries from LogFileWrapper
-                all_entries = list(self.log_wrapper.log_entries)
+            # Calculate range to fetch (newest first)
+            end_index = total_entries - 1
+            start_index = max(0, end_index - start - limit + 1)
+            count = min(limit, end_index - start_index + 1)
 
-                # Apply filters
-                filtered_logs = []
-                for entry in reversed(all_entries):  # Newest first
-                    level_match = not level_filter or entry.get('levelname', 'UNKNOWN') in level_filter
-                    module_match = not module_filter or entry.get('module', '') in module_filter
+            # Fetch log entries using _id
+            logs = self.log_wrapper.get_logs(
+                start_id=start_index,
+                count=count,
+                filter_func=lambda entry: (
+                        (not level_filter or entry.get('levelname', 'UNKNOWN') in level_filter) and
+                        (not module_filter or (entry.get('module', '') + '.' + entry.get('name', '')) in module_filter)
+                )
+            )
 
-                    if level_match and module_match:
-                        filtered_logs.append(entry)
-
-                # Apply pagination
-                total = len(filtered_logs)
-                result_logs = filtered_logs[start:start + limit]
-
-                return jsonify({
-                    'logs': result_logs,
-                    'total': total,
-                    'start': start,
-                    'limit': limit,
-                    'revision': self.log_revision,
-                    'hasMore': (start + limit) < total
-                })
+            return jsonify({
+                'logs': logs,
+                'total': total_entries,
+                'start': start,
+                'limit': limit,
+                'hasMore': (start + limit) < total_entries
+            })
 
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-    def get_module_hierarchy(self):
-        with self.cache_lock:
-            return jsonify({
-                'hierarchy': {k: list(v) for k, v in self.module_hierarchy.items()},
-                'revision': self.log_revision
-            })
-
-    def get_log_stats(self):
-        with self.cache_lock:
-            level_counts = {level: len(logs) for level, logs in self.level_index.items()}
-            module_counts = {module: len(logs) for module, logs in self.module_index.items()}
-
-            return jsonify({
-                'totalEntries': len(self.log_wrapper.log_entries),
-                'levelCounts': level_counts,
-                'moduleCounts': module_counts,
-                'revision': self.log_revision
-            })
-
     def stream_logs(self):
-        """Server-sent events with revision-based updates"""
+        """Server-sent events with _id based updates"""
+        # Get last_id from query parameter or session
+        last_id = request.args.get('last_id', -1, type=int)
+        if last_id < 0 and 'last_id' in session:
+            last_id = session.get('last_id', -1)
 
         def event_stream():
-            last_revision = self.log_revision
+            current_last_id = last_id
             last_heartbeat = time.time()
 
             while True:
@@ -260,24 +178,16 @@ class LoggerBackend:
                     yield ": heartbeat\n\n"
                     last_heartbeat = current_time
 
-                with self.cache_lock:
-                    if last_revision != self.log_revision:
-                        # Get all entries since last revision
-                        all_entries = list(self.log_wrapper.log_entries)
-                        new_entries = []
+                # Check for new entries
+                if self.log_wrapper.check_updates(current_last_id):
+                    new_entries = self.log_wrapper.get_logs(
+                        start_id=current_last_id + 1,
+                        count=100
+                    )
 
-                        # Find new entries (simplified approach)
-                        # In a real implementation, we'd track which entries were already sent
-                        for entry in reversed(all_entries):
-                            # This is a simplified approach - in production you'd need a better way
-                            # to track which entries have been sent to this client
-                            new_entries.append(entry)
-                            if len(new_entries) >= 100:  # Limit batch size
-                                break
-
-                        for log in reversed(new_entries):  # Send in chronological order
-                            yield f"data: {json.dumps(log)}\n\n"
-                        last_revision = self.log_revision
+                    for entry in new_entries:
+                        current_last_id = entry['_id']
+                        yield f"data: {json.dumps(entry)}\n\n"
 
                 time.sleep(0.5)
 
@@ -290,7 +200,6 @@ def main():
     # Standalone service
     backend = LoggerBackend(
         monitoring_file_path="application.log",
-        cache_limit_by=LoggerBackend.LIMIT_BY_LINE,
         cache_limit_count=10000
     )
     backend.start_service(blocking=True)
