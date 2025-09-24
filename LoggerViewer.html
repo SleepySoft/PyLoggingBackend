@@ -1373,17 +1373,17 @@
 
         // 初始化表头编辑器
         function initHeaderEditor() {
-<!--            // 从localStorage加载保存的设置-->
-<!--            const savedSettings = localStorage.getItem('logViewerColumnSettings');-->
-<!--            if (savedSettings) {-->
-<!--                try {-->
-<!--                    const settings = JSON.parse(savedSettings);-->
-<!--                    if (settings.visibleColumns) visibleColumns = settings.visibleColumns;-->
-<!--                    if (settings.columnOrder) columnOrder = settings.columnOrder;-->
-<!--                } catch (e) {-->
-<!--                    console.error('Error loading column settings:', e);-->
-<!--                }-->
-<!--            }-->
+            // 从localStorage加载保存的设置
+            const savedSettings = localStorage.getItem('logViewerColumnSettings');
+            if (savedSettings) {
+                try {
+                    const settings = JSON.parse(savedSettings);
+                    if (settings.visibleColumns) visibleColumns = settings.visibleColumns;
+                    if (settings.columnOrder) columnOrder = settings.columnOrder;
+                } catch (e) {
+                    console.error('Error loading column settings:', e);
+                }
+            }
 
             // 设置表头编辑器按钮点击事件
             document.getElementById('headerEditorBtn').addEventListener('click', function(e) {
@@ -1417,7 +1417,7 @@
 
             // 1. 按现有顺序把 columnOrder 里“还活着”的字段先摆好
             const existInOrder = columnOrder.filter(c => availableColumns.includes(c));
-        
+
             // 2. 把 availableColumns 里“从未出现过”的新字段追加到末尾
             const newColumns = availableColumns.filter(c => !columnOrder.includes(c));
 
