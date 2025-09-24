@@ -125,7 +125,7 @@ class LoggerBackend:
     def get_logs(self):
         """Get logs with filtering and pagination using _id"""
         try:
-            start = int(request.args.get('start', 0))
+            start_arg = request.args.get('start')
             limit = int(request.args.get('limit', 100))
             level_filter = request.args.getlist('level[]')
             module_filter = request.args.getlist('module[]')
@@ -133,15 +133,21 @@ class LoggerBackend:
             # Get total number of entries
             total_entries = self.log_wrapper.get_total_count()
 
-            # Calculate range to fetch (newest first)
-            end_index = total_entries - 1
-            start_index = max(0, end_index - start - limit + 1)
-            count = min(limit, end_index - start_index + 1)
+            if start_arg is not None:
+                start = int(start_arg)
+            else:
+                newest_id = self.log_wrapper.get_newest_log_id()
+                start = newest_id - limit
+
+            # # Calculate range to fetch (newest first)
+            # end_index = total_entries - 1
+            # start_index = max(0, end_index - start - limit + 1)
+            # count = min(limit, end_index - start_index + 1)
 
             # Fetch log entries using _id
             logs = self.log_wrapper.get_logs(
-                start_id=start_index,
-                count=count,
+                start_id=start,
+                count=limit,
                 filter_func=lambda entry: (
                         (not level_filter or entry.get('levelname', 'UNKNOWN') in level_filter) and
                         (not module_filter or (entry.get('module', '') + '.' + entry.get('name', '')) in module_filter)
@@ -163,8 +169,8 @@ class LoggerBackend:
         """Server-sent events with _id based updates"""
         # Get last_id from query parameter or session
         last_id = request.args.get('last_id', -1, type=int)
-        if last_id < 0 and 'last_id' in session:
-            last_id = session.get('last_id', -1)
+        if last_id < 0 :
+            last_id = self.log_wrapper.get_newest_log_id()
 
         def event_stream():
             current_last_id = last_id

@@ -115,7 +115,7 @@
         .toggle-sidebar-btn {
             position: absolute;
             top: 10px;
-            right: 10px;
+            left: 10px;        /* ← 关键：从 right 改到 left */
             z-index: 1000;
             background: #6c757d;
             border: none;
@@ -709,6 +709,8 @@
                     </div>
                 </div>
 
+                <div class="scroll-observer" id="scrollObserver"></div>
+
                 <div class="table-responsive">
                     <table class="log-table">
                         <thead id="logTableHeader">
@@ -719,8 +721,6 @@
                         </tbody>
                     </table>
                 </div>
-
-                <div class="scroll-observer" id="scrollObserver"></div>
             </div>
 
             <div class="text-center p-3 text-muted" id="initialLoading">
@@ -755,6 +755,10 @@
         let isNearBottom = true;
         let lastReceivedId = -1; // Track last received log ID
         let moduleHierarchy = {}; // Store module hierarchy data
+        let lastScrollTop = 0;      // 上一次滚动条位置
+        let isScrollingUp = false;  // 方向
+        let oldestIndex = null;   // 当前列表里最小的绝对 id（index）
+        let newestIndex = null;   // 当前列表里最大的绝对 id（index）
 
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
@@ -829,9 +833,11 @@
 
             observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    // 添加边界检查，防止无限加载
-                    if (entry.isIntersecting && hasMoreLogs && !isLoading && currentStart > 0) {
-                        loadMoreLogs();
+                    if (entry.isIntersecting              // 元素进入视口
+                        && hasMoreLogs && !isLoading      // 还有数据且空闲
+                        && isScrollingUp                  // 关键：必须是向上滚
+                        && currentStart > 0) {            // 还有更早的
+                        loadMoreLogs();                   // 拉旧数据
                     }
                 });
             }, options);
@@ -847,6 +853,9 @@
             const scrollTop = container.scrollTop;
             const scrollHeight = container.scrollHeight;
             const clientHeight = container.clientHeight;
+
+            isScrollingUp = scrollTop < lastScrollTop;
+            lastScrollTop = scrollTop;
 
             // 如果距离底部小于100px，则认为接近底部
             isNearBottom = (scrollHeight - scrollTop - clientHeight) < 100;
@@ -904,11 +913,18 @@
 
             // Load logs first, then setup SSE
             fetchLogs(true)
-                .then(() => {
-                    // 添加滚动到底部
-                    setTimeout(() => {
-                        scrollToBottom();
-                    }, 100);
+                .then(data => {
+                    /* 1. 记录边界索引（后端返回的是正序）*/
+                    const logs = data.logs;
+                    if (logs.length) {
+                        oldestIndex = logs[0]._id;          // 最小绝对 id
+                        newestIndex = logs[logs.length - 1]._id; // 最大绝对 id
+                    }
+
+                    /* 2. 滚动到底部 */
+                    setTimeout(() => scrollToBottom(), 100);
+
+                    /* 3. 启动实时推送 */
                     setupEventSource();
                 })
                 .catch(error => {
@@ -1045,7 +1061,7 @@
             }
 
             // Reload logs with new filters
-            fetchLogs(true)
+            fetchLogs(false)
                 .then(() => {
                     setupEventSource();
                 })
@@ -1062,114 +1078,61 @@
             document.getElementById('filterStatus').textContent = levelText + moduleText;
         }
 
-        // Fetch logs with current filters (returns Promise)
+        function prependLogRow(log) {
+            const tbody = document.getElementById('logTableBody');
+            const tr = createLogRow(log);   // 复用你已有的 createLogRow
+            tbody.insertBefore(tr, tbody.firstChild);
+        }
+
         function fetchLogs(reset = false) {
             return new Promise((resolve, reject) => {
-                if (isLoading) {
-                    console.log('Already loading logs, skipping request');
-                    reject('Already loading logs');
-                    return;
-                }
-
-                if (reset) {
-                    currentStart = 0;
-                    hasMoreLogs = true;
-                }
-
-                if (!hasMoreLogs) {
-                    console.log('No more logs to load');
-                    reject('No more logs to load');
-                    return;
-                }
+                if (isLoading) { reject('busy'); return; }
 
                 isLoading = true;
-                document.getElementById('loadStatus').textContent = 'Loading...';
+                document.getElementById('loadStatus').textContent = 'Loading…';
 
-                // Show loading indicator for initial load
+                const params = new URLSearchParams();
+                /* 关键：reset 时从最新开始；加载更旧时从“oldestIndex”往前推 */
                 if (reset) {
-                    document.getElementById('initialLoading').style.display = 'block';
+                    // 不写start参数则取最新
+                    params.set('limit', currentLimit);
+                } else {
+                    // 向后端要 “start=oldestIndex” 开始往后 limit 条
+                    // 因为后端 index 是 0→N（越老越小），所以这样就是“更旧”
+                    params.set('start', oldestIndex - currentLimit);
+                    params.set('limit', currentLimit);
                 }
 
-                // Build query parameters
-                const params = new URLSearchParams({
-                    start: currentStart,
-                    limit: currentLimit
-                });
+                selectedLevels.forEach(l => params.append('level[]', l));
+                selectedModules.forEach(m => params.append('module[]', m));
 
-                // Add level filters
-                selectedLevels.forEach(level => {
-                    params.append('level[]', level);
-                });
-
-                // Add module filters
-                selectedModules.forEach(module => {
-                    params.append('module[]', module);
-                });
-
-                console.log('Fetching logs with params:', params.toString());
-
-                fetch('/logger/api/logs?' + params.toString())
-                    .then(response => {
-                        if (!response.ok) throw new Error('Network response was not ok');
-                        return response.json();
-                    })
+                fetch('/logger/api/logs?' + params)
+                    .then(r => r.json())
                     .then(data => {
-                        console.log('Received logs data:', data);
+                        const { logs, total, hasMore } = data;
 
                         if (reset) {
-                            clearLogTable()
+                            clearLogTable();
+                            renderLogs(logs, true);
+                            // 更新边界
+                            newestIndex = logs.length ? logs[logs.length - 1]._id : null;
+                            oldestIndex = logs.length ? logs[0]._id : null;
+                        } else {
+                            // 更旧数据 → 直接插到 tbody 最前面
+                            logs.forEach(log => prependLogRow(log));
+                            if (logs.length) oldestIndex = logs[0]._id;
                         }
 
-                        renderLogs(data.logs, reset);
-
-                        currentStart += data.logs.length;
-                        hasMoreLogs = data.hasMore;
-                        totalEntries = data.total;
-
-                        // Update entry count
-                        document.getElementById('entryCount').textContent = 
-                            `${data.total.toLocaleString()} Entries`;
-                        document.getElementById('mainEntryCount').textContent = 
-                            `${data.total.toLocaleString()} Entries`;
-
-                        // Set lastReceivedId to the highest ID in the loaded logs
-                        if (reset && data.logs.length > 0) {
-                            lastReceivedId = data.logs[data.logs.length - 1]._id;
-                            console.log('Set lastReceivedId to', lastReceivedId);
-                        }
-
+                        hasMoreLogs = hasMore;
+                        totalEntries = total;
                         isLoading = false;
                         document.getElementById('loadStatus').textContent = '';
-
-                        const initialLoadingElement = document.getElementById('initialLoading');
-                        if (initialLoadingElement) {
-                            initialLoadingElement.style.display = 'none';
-                        } else {
-                            console.error('Error: Element with ID "initialLoading" was not found in the DOM.');
-                        }
-
-                        // Re-setup observer after DOM update
-                        if (observer) {
-                            observer.disconnect();
-                            const observerElement = document.getElementById('scrollObserver');
-                            if (observerElement) {
-                                observer.observe(observerElement);
-                            }
-                        }
-
                         resolve(data);
                     })
-                    .catch(error => {
-                        console.error('Error fetching logs:', error);
+                    .catch(err => {
                         isLoading = false;
-                        document.getElementById('loadStatus').textContent = 'Error loading logs';
-                        const initialLoadingElement = document.getElementById('initialLoading');
-                        if (initialLoadingElement) {
-                            initialLoadingElement.style.display = 'none';
-                        } else {
-                            console.error('Error: Element with ID "initialLoading" was not found in the DOM.');
-                        }
-                        reject(error);
+                        document.getElementById('loadStatus').textContent = 'Error';
+                        reject(err);
                     });
             });
         }
@@ -1356,9 +1319,14 @@
 
         // Load more logs when scrolling up
         function loadMoreLogs() {
-            if (!isLoading && hasMoreLogs) {
-                fetchLogs(false);
-            }
+            if (isLoading || !hasMoreLogs) return;
+            const beforeHeight = document.getElementById('logTableBody').scrollHeight;
+            fetchLogs(false).then(() => {
+                // 保持视觉锚点：滚动条停在旧行位置
+                const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                document.querySelector('.log-entries-container').scrollTop +=
+                    afterHeight - beforeHeight;
+            });
         }
 
         // Update statistics panel

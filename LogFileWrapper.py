@@ -252,6 +252,10 @@ class LogFileWrapper:
                 return len(self.log_entries)
             return sum(1 for entry in self.log_entries if filter_func(entry))
 
+    def get_newest_log_id(self) -> int:
+        with self.lock:
+            return self.log_entries[-1]['_id'] if self.log_entries else -1
+
     def check_updates(self, current_id: int) -> Dict[str, Any]:
         """
         Check if new logs are available since specified _id
