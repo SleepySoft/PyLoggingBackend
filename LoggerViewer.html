@@ -28,26 +28,84 @@
         }
 
         .sidebar {
-            width: var(--sidebar-width);
-            height: 100%;
-            overflow-y: auto;
-            background-color: #f8f9fa;
-            border-right: 1px solid #dee2e6;
-            transition: all var(--transition-speed);
             display: flex;
             flex-direction: column;
-            position: relative;
+            height: 100vh;
+            overflow-y: visible;
+            width: var(--sidebar-width);
+            background-color: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+        }
+
+        .sidebar-content {
+            flex: 1 1 0;
+            display: flex;
+            overflow: hidden;
+            flex-direction: column;
+            overflow-y: visible;
+            padding: 1rem;
+          min-height: 0;
+        }
+
+        .module-panel {
+            flex: 1 1 auto;          /* 先正常吃剩余高度 */
+            min-height: 300px;       /* 无论如何不低于 300 px */
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0;
+        }
+        .module-panel .card-body {
+            flex: 1 1 auto;
+            display: flex;           /* 让 body 也成为 flex 容器 */
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden;
+        }
+        .module-tree {
+            flex: 1 1 auto;          /* 占满 body 高度 */
+            overflow-y: auto;
+            padding: .75rem;
+            border: none;
+        }
+
+        /* 4. 真正的折叠动画 */
+        .tree-children {
+          overflow: hidden;
+          transition: max-height .25s ease-out;
+          max-height: 0;                 /* 收起时 */
+        }
+        .tree-children.expanded {
+          max-height: 2000px;            /* 展开时，足够大即可 */
+        }
+
+        /* 5. 三角旋转 */
+        .tree-toggle {
+          display: inline-block;
+          width: 1rem;
+          text-align: center;
+          transition: transform .2s;
+        }
+        .tree-toggle.collapsed {
+          transform: rotate(-90deg);
+        }
+
+        /* 1. 让“模块”这张 card 占满侧边栏剩余空间 */
+        .card.module-panel {              /* 给 Module Panel 的 card 加这个类 */
+            flex: 1 1 0;                   /* 关键：占满剩余高度 */
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0;              /* 去掉默认下边距，避免撑出滚动条 */
+        }
+
+        /* 2. 让 card-body 继续把高度传递给内部 */
+        .card.module-panel .card-body {
+            flex: 1 1 0;                   /* 继续把剩余高度吃满 */
+            padding: 0;                    /* 滚动条贴边，视觉更整齐 */
+            overflow: hidden;              /* 只让内部 tree 滚 */
         }
 
         .sidebar.collapsed {
             width: var(--sidebar-collapsed-width);
-        }
-
-        .sidebar-content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 1rem;
-            display: block;
         }
 
         .sidebar.collapsed .sidebar-content {
@@ -138,17 +196,6 @@
         .badge-WARNING { background-color: #ffc107; }
         .badge-ERROR { background-color: #dc3545; }
         .badge-CRITICAL { background-color: #6f42c1; }
-
-        .module-tree {
-            max-height: 300px;
-            overflow-y: auto;
-            font-size: 14px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 8px;
-            background-color: white;
-            margin-bottom: 1rem;
-        }
 
         .filter-section {
             margin-bottom: 1rem;
@@ -582,13 +629,18 @@
                         </div>
 
                         <!-- Module Tree -->
-                        <div class="filter-section">
-                            <label class="form-label fw-bold">Modules:</label>
-                            <div class="module-tree" id="moduleTree">
-                                <div class="text-center text-muted">
-                                    <i class="fas fa-spinner fa-spin"></i> Loading modules...
-                                </div>
-                            </div>
+
+                        <!-- 替换掉原来的 “Module Tree” filter-section -->
+                        <div class="card module-panel">          <!-- 新增类 module-panel -->
+                          <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-sitemap"></i> Modules</span>
+                            <button class="btn btn-sm btn-light" onclick="expandAllModules()">
+                              <i class="fas fa-expand"></i>
+                            </button>
+                          </div>
+                          <div class="card-body">
+                            <div class="module-tree" id="moduleTree"></div>
+                          </div>
                         </div>
 
                         <button class="btn btn-primary w-100" onclick="applyFilters()">
@@ -867,19 +919,22 @@
 
         // Fetch module hierarchy
         function fetchModuleHierarchy() {
+            const treeBox = document.getElementById('moduleTree');
+
+            // ① 只替换 #moduleTree 内部，而不是把 parent 整个重写
+            treeBox.innerHTML = `
+                <div class="text-center text-muted p-2">
+                    <i class="fas fa-spinner fa-spin"></i> Loading modules...
+                </div>`;
+
             fetch('/logger/api/modules')
-                .then(response => {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.json();
+                .then(r => r.json())
+                .then(d => {
+                    moduleHierarchy = d.hierarchy;
+                    renderModuleTree(moduleHierarchy);   // 现在 treeBox 仍在，能正常渲染
                 })
-                .then(data => {
-                    moduleHierarchy = data.hierarchy;
-                    renderModuleTree(moduleHierarchy);
-                })
-                .catch(error => {
-                    console.error('Error fetching module hierarchy:', error);
-                    document.getElementById('moduleTree').innerHTML = 
-                        '<div class="text-center text-danger">Error loading modules</div>';
+                .catch(e => {
+                    treeBox.innerHTML = `<div class="text-danger small p-2">Error loading modules</div>`;
                 });
         }
 
@@ -891,68 +946,66 @@
             fetchModuleHierarchy();
         }
 
-        // Render module tree with checkboxes
         function renderModuleTree(hierarchy) {
-            const treeContainer = document.getElementById('moduleTree');
+            console.count('renderModuleTree called');   // ←
+            console.log('hierarchy', hierarchy);        // ←
 
-            // Clear existing content
-            treeContainer.innerHTML = '';
+            const box = document.getElementById('moduleTree');
+            box.innerHTML = '';          // 清空旧内容
 
-            // Create select all/none buttons
-            const buttonGroup = document.createElement('div');
-            buttonGroup.className = 'btn-group w-100 mb-2';
-            buttonGroup.innerHTML = `
-                <button class="btn btn-sm btn-outline-primary" onclick="selectAllModules()">Select All</button>
-                <button class="btn btn-sm btn-outline-secondary" onclick="deselectAllModules()">Select None</button>
-            `;
-            treeContainer.appendChild(buttonGroup);
+            // 工具：递归创建节点
+            function makeNode(name, children, depth = 0) {
+                const hasKids = children && children.length;
+                const nodeDiv = document.createElement('div');
+                nodeDiv.className = 'tree-node';
+                nodeDiv.style.marginLeft = depth * 16 + 'px';
 
-            // Create module list container
-            const moduleList = document.createElement('div');
-            moduleList.className = 'module-list';
-            moduleList.style.maxHeight = '250px';
-            moduleList.style.overflowY = 'auto';
+                // 行容器（点击整行可折叠）
+                const row = document.createElement('div');
+                row.className = 'tree-row d-flex align-items-center';
+                row.innerHTML = `
+                    <span class="tree-toggle ${hasKids?'':'invisible'}">
+                        <i class="fas fa-chevron-down fa-xs"></i>
+                    </span>
+                    <input class="form-check-input module-checkbox ms-1" type="checkbox"
+                           value="${name}" id="mod-${name}">
+                    <label class="form-check-label flex-fill small" for="mod-${name}"
+                           title="${name}">${name.split('.').pop()}</label>
+                `;
 
-            // Function to recursively render modules
-            function renderModules(parent, level = 0) {
-                const children = hierarchy[parent] || [];
-                if (children.length === 0) return '';
+                // 子容器（可折叠）
+                const childBox = document.createElement('div');
+                childBox.className = 'tree-children';
+                if (hasKids) {
+                    children.forEach(c => childBox.appendChild(makeNode(c, hierarchy[c], depth + 1)));
+                }
 
-                let html = '';
-                children.forEach(module => {
-                    const indent = level * 20;
-                    html += `
-                        <div class="module-item" style="margin-left: ${indent}px;">
-                            <div class="module-label">
-                                <input class="form-check-input module-checkbox" type="checkbox" value="${module}" id="module-${module}">
-                                <label class="form-check-label" for="module-${module}" title="${module}">
-                                    ${module.split('.').pop() || module}
-                                </label>
-                            </div>
-                    `;
+                // 折叠交互
+                if (hasKids) {
+                    row.style.cursor = 'pointer';
+                    row.addEventListener('click', e => {
+                        if (e.target.closest('input')) return;   // 点 checkbox 不折叠
+                        childBox.classList.toggle('expanded');
+                        row.querySelector('.tree-toggle').classList.toggle('collapsed');
+                    });
+                    childBox.classList.add('expanded'); // 默认展开
+                }
 
-                    // Recursively render child modules
-                    const childHtml = renderModules(module, level + 1);
-                    if (childHtml) {
-                        html += `<div class="module-children">${childHtml}</div>`;
-                    }
+                nodeDiv.append(row, childBox);
+                console.log('treeBox children.length =', box.children.length);
 
-                    html += `</div>`;
-                });
-
-                return html;
+                return nodeDiv;
             }
 
-            // Start rendering from root
-            moduleList.innerHTML = renderModules('root');
-            treeContainer.appendChild(moduleList);
+            // 从 root 开始画
+            const rootKids = hierarchy.root || [];
+            rootKids.forEach(n => box.appendChild(makeNode(n, hierarchy[n])));
 
-            // Add event listeners to checkboxes
-            document.querySelectorAll('.module-checkbox').forEach(checkbox => {
-                checkbox.addEventListener('change', updateSelectedModules);
-            });
-
-            updateSelectedModules();
+            // 绑定 checkbox 事件
+            box.querySelectorAll('.module-checkbox').forEach(cb =>
+                cb.addEventListener('change', updateSelectedModules)
+            );
+            updateSelectedModules();   // 初始化已选数组
         }
 
         // Select all modules
@@ -1718,6 +1771,14 @@
 
             // 处理应用按钮的点击事件
             document.getElementById('applyColumnBtn').addEventListener('click', applyColumnSettings);
+        }
+
+        function expandAllModules(expanded = true) {
+            document.querySelectorAll('.tree-children').forEach(box => {
+                box.classList.toggle('expanded', expanded);
+                box.previousElementSibling.querySelector('.tree-toggle')
+                     .classList.toggle('collapsed', !expanded);
+            });
         }
     </script>
 </body>
