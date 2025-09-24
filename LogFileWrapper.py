@@ -281,41 +281,6 @@ class LogFileWrapper:
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-# import time
-# import logging
-# import random
-# import os
-#
-# # Configure logging to display messages
-# logging.basicConfig(
-#     level=logging.INFO,
-#     format='%(asctime)s - %(levelname)s - %(message)s',
-#     handlers=[logging.StreamHandler()]
-# )
-#
-#
-# def simulate_log_writer(log_file_path: str):
-#     """Simulate a process that writes logs to a file"""
-#     if not os.path.exists(log_file_path):
-#         open(log_file_path, 'w').close()  # Create empty file
-#
-#     while True:
-#         try:
-#             with open(log_file_path, 'a', encoding='utf-8') as f:
-#                 for _ in range(random.randint(1, 5)):
-#                     log_entry = {
-#                         "timestamp": time.time(),
-#                         "level": random.choice(["INFO", "WARN", "ERROR"]),
-#                         "message": f"Log event {random.randint(1000, 9999)}"
-#                     }
-#                     f.write(json.dumps(log_entry) + "\n")
-#                     logging.info(f"Wrote log: {log_entry['message']}")
-#         except Exception as e:
-#             logging.error(f"Log writer error: {e}")
-#
-#         time.sleep(random.uniform(0.5, 2.0))
-
-
 def print_log(log):
     if "message" in log:
         log_msg = f"{log.get('asctime', '')} [{log.get('levelname', 'UNKNOWN')}] {log['message']}"
