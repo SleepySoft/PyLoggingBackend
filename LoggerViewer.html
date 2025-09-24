@@ -1373,17 +1373,17 @@
 
         // 初始化表头编辑器
         function initHeaderEditor() {
-            // 从localStorage加载保存的设置
-            const savedSettings = localStorage.getItem('logViewerColumnSettings');
-            if (savedSettings) {
-                try {
-                    const settings = JSON.parse(savedSettings);
-                    if (settings.visibleColumns) visibleColumns = settings.visibleColumns;
-                    if (settings.columnOrder) columnOrder = settings.columnOrder;
-                } catch (e) {
-                    console.error('Error loading column settings:', e);
-                }
-            }
+<!--            // 从localStorage加载保存的设置-->
+<!--            const savedSettings = localStorage.getItem('logViewerColumnSettings');-->
+<!--            if (savedSettings) {-->
+<!--                try {-->
+<!--                    const settings = JSON.parse(savedSettings);-->
+<!--                    if (settings.visibleColumns) visibleColumns = settings.visibleColumns;-->
+<!--                    if (settings.columnOrder) columnOrder = settings.columnOrder;-->
+<!--                } catch (e) {-->
+<!--                    console.error('Error loading column settings:', e);-->
+<!--                }-->
+<!--            }-->
 
             // 设置表头编辑器按钮点击事件
             document.getElementById('headerEditorBtn').addEventListener('click', function(e) {
@@ -1411,12 +1411,30 @@
             renderTableHeader();
         }
 
-        // 渲染列编辑器
         function renderColumnEditor() {
             const columnList = document.getElementById('columnList');
             columnList.innerHTML = '';
 
-            columnOrder.forEach(column => {
+            // 1. 按现有顺序把 columnOrder 里“还活着”的字段先摆好
+            const existInOrder = columnOrder.filter(c => availableColumns.includes(c));
+        
+            // 2. 把 availableColumns 里“从未出现过”的新字段追加到末尾
+            const newColumns = availableColumns.filter(c => !columnOrder.includes(c));
+
+            // 3. 合并成“本次真正要画”的列表，同时把新字段写回 columnOrder（仅内存）
+            const columnsToRender = [...existInOrder, ...newColumns];
+            if (newColumns.length) {
+                columnOrder.push(...newColumns);
+                // 顺手持久化，防止刷新丢失
+                try {
+                    localStorage.setItem('logViewerColumnOrder', JSON.stringify(columnOrder));
+                } catch (e) {
+                    console.error('Failed to save columnOrder:', e);
+                }
+            }
+
+            // 4. 画 DOM
+            columnsToRender.forEach(column => {
                 const isChecked = visibleColumns.includes(column);
                 const div = document.createElement('div');
                 div.className = 'column-item';
@@ -1431,6 +1449,27 @@
                 columnList.appendChild(div);
             });
         }
+
+<!--        // 渲染列编辑器-->
+<!--        function renderColumnEditor() {-->
+<!--            const columnList = document.getElementById('columnList');-->
+<!--            columnList.innerHTML = '';-->
+
+<!--            columnOrder.forEach(column => {-->
+<!--                const isChecked = visibleColumns.includes(column);-->
+<!--                const div = document.createElement('div');-->
+<!--                div.className = 'column-item';-->
+<!--                div.dataset.column = column;-->
+<!--                div.draggable = true;-->
+<!--                div.innerHTML = `-->
+<!--                    <span class="column-handle"><i class="fas fa-grip-vertical"></i></span>-->
+<!--                    <input type="checkbox" class="column-checkbox" id="col-${column}"-->
+<!--                           ${isChecked ? 'checked' : ''}>-->
+<!--                    <label for="col-${column}">${column}</label>-->
+<!--                `;-->
+<!--                columnList.appendChild(div);-->
+<!--            });-->
+<!--        }-->
 
         // 设置拖拽排序功能
         function setupDragAndDrop() {
