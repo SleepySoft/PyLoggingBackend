@@ -638,7 +638,7 @@ LOGGER_VIEWER = """
         
         // Fetch module hierarchy
         function fetchModuleHierarchy() {
-            fetch('/api/modules')
+            fetch('/logger/api/modules')
                 .then(response => {
                     if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
@@ -791,7 +791,7 @@ LOGGER_VIEWER = """
             
             console.log('Fetching logs with params:', params.toString());
             
-            fetch('/api/logs?' + params.toString())
+            fetch('/logger/api/logs?' + params.toString())
                 .then(response => {
                     if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
@@ -913,7 +913,7 @@ LOGGER_VIEWER = """
             selectedLevels.forEach(level => params.append('level[]', level));
             selectedModules.forEach(module => params.append('module[]', module));
             
-            eventSource = new EventSource('/api/stream?' + params.toString());
+            eventSource = new EventSource('/logger/api/stream?' + params.toString());
             
             eventSource.addEventListener('open', () => {
                 console.log('SSE连接已建立');
@@ -1080,7 +1080,7 @@ LOGGER_VIEWER = """
         
         // Update statistics panel
         function updateStats() {
-            fetch('/api/stats')
+            fetch('/logger/api/stats')
                 .then(response => {
                     if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();

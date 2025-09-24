@@ -24,6 +24,23 @@ FILE_POSITION = 0
 MODULE_HIERARCHY = defaultdict(set)
 
 
+class LoggerBackend:
+    LIMIT_BY_LINE = 1
+    LIMIT_BY_SIZE = 2
+
+    # TODO: Move code inside this class
+    # TODO: Think about how to handle history and real-time logs so makes front-end take it more comfort.
+
+    def __init__(self, monitoring_file_path: str, cache_limit_by: int, cache_limit_count: int, start_service: bool):
+        self.log_revision = 0           # Use revision to judge new log available.
+        # TODO: Start file monitoring thread
+        # TODO: Start web service in a thread if start_service else register_router() must be call outside with an existing app.
+
+    def register_router(self, app: Flask):
+        # TODO: Put routers here. Routers path should start with "/logger/*"
+        pass
+
+
 def monitor_log_file():
     """Background thread to monitor log file for changes"""
     global FILE_POSITION, LOG_CACHE, MODULE_HIERARCHY
