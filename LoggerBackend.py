@@ -4,10 +4,9 @@ import json
 import traceback
 import threading
 from collections import defaultdict
-from flask import Flask, request, jsonify, Response, session
+from flask import Flask, request, jsonify, Response, session, send_file
 from flask_cors import CORS
 
-from LoggerViewerTemplate import LOGGER_VIEWER
 from LogFileWrapper import LogFileWrapper  # Import the updated LogFileWrapper class
 
 
@@ -88,7 +87,7 @@ class LoggerBackend:
     # ------------------------------------------ Web Service ------------------------------------------
 
     def log_viewer(self):
-        return LOGGER_VIEWER
+        return send_file('LoggerViewer.html')
 
     def get_module_hierarchy(self):
         with self.cache_lock:
