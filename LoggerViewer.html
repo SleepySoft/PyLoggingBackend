@@ -1625,6 +1625,269 @@
                      .classList.toggle('collapsed', !expanded);
             });
         }
+
+        // -------------------------------------------------------------------------------------------------------------
+
+        // 全局缓存相关变量
+        let logCache = []; // 按_id升序排列的日志缓存
+        let cacheMinId = null; // 缓存中最小_id
+        let cacheMaxId = null; // 缓存中最大_id
+
+        // 显示列表相关变量
+        let displayMinId = null; // 当前显示的最小_id
+        let displayMaxId = null; // 当前显示的最大_id
+
+        /**
+         * 将日志合并到缓存中，保持按_id升序排列
+         * @param {Array} newLogs - 新的日志数组
+         */
+        function mergeLogsToCache(newLogs) {
+            if (!newLogs || newLogs.length === 0) return;
+
+            // 确保newLogs是数组
+            const logs = Array.isArray(newLogs) ? newLogs : [newLogs];
+
+            // 如果缓存为空，直接设置
+            if (logCache.length === 0) {
+                logCache = logs.sort((a, b) => a._id - b._id);
+                cacheMinId = logCache[0]._id;
+                cacheMaxId = logCache[logCache.length - 1]._id;
+                return;
+            }
+
+            // 合并并去重
+            const idSet = new Set(logCache.map(log => log._id));
+            const uniqueNewLogs = logs.filter(log => !idSet.has(log._id));
+
+            if (uniqueNewLogs.length === 0) return;
+
+            // 合并到缓存
+            logCache = logCache.concat(uniqueNewLogs)
+                              .sort((a, b) => a._id - b._id);
+
+            // 更新缓存边界
+            cacheMinId = Math.min(cacheMinId, ...uniqueNewLogs.map(log => log._id));
+            cacheMaxId = Math.max(cacheMaxId, ...uniqueNewLogs.map(log => log._id));
+        }
+
+        /**
+         * 从接口获取日志数据并合并到缓存
+         * @param {number} count - 获取数量，正数为向后获取，负数为向前获取
+         */
+        function fetchLogsToCache(count) {
+            return new Promise((resolve, reject) => {
+                if (isLoading) return reject('busy');
+                isLoading = true;
+                document.getElementById('loadStatus').textContent = 'Loading…';
+
+                const params = new URLSearchParams();
+
+                // 根据count正负决定获取方向
+                if (count > 0) {
+                    // 向后获取：从cacheMaxId开始
+                    const start = cacheMaxId !== null ? cacheMaxId + 1 : 0;
+                    params.set('start_log_id', start);
+                    params.set('limit', count);
+                } else {
+                    // 向前获取：从cacheMinId向前获取abs(count)条
+                    const absCount = Math.abs(count);
+                    const start = cacheMinId !== null ? Math.max(0, cacheMinId - absCount) : 0;
+                    params.set('start_log_id', start);
+                    params.set('limit', absCount);
+                }
+
+                // 不应用filter，获取原始数据
+                fetch('/logger/api/modules?' + params)
+                    .then(r => r.json())
+                    .then(data => {
+                        const { logs } = data;
+                        if (logs && logs.length > 0) {
+                            mergeLogsToCache(logs);
+                        }
+                        isLoading = false;
+                        document.getElementById('loadStatus').textContent = '';
+                        resolve(data);
+                    })
+                    .catch(err => {
+                        isLoading = false;
+                        document.getElementById('loadStatus').textContent = 'Error';
+                        reject(err);
+                    });
+            });
+        }
+
+        /**
+         * 基于缓存更新显示列表，应用filter筛选
+         */
+        function updateDisplayFromCache() {
+            if (logCache.length === 0) {
+                clearLogTable();
+                return;
+            }
+
+            // 应用filter筛选需要显示的日志
+            const filteredLogs = logCache.filter(log => {
+                const levelMatch = selectedLevels.includes(log.levelname);
+                const moduleMatch = selectedModules.length === 0 ||
+                                   selectedModules.includes(log.module);
+                return levelMatch && moduleMatch;
+            });
+
+            if (filteredLogs.length === 0) {
+                clearLogTable();
+                displayMinId = null;
+                displayMaxId = null;
+                return;
+            }
+
+            // 计算显示列表的边界
+            const newDisplayMinId = filteredLogs[0]._id;
+            const newDisplayMaxId = filteredLogs[filteredLogs.length - 1]._id;
+
+            // 判断更新策略
+            if (displayMinId === null || displayMaxId === null) {
+                // 初次显示或重置
+                renderTableBody(filteredLogs);
+                displayMinId = newDisplayMinId;
+                displayMaxId = newDisplayMaxId;
+            } else {
+                // 增量更新
+                if (newDisplayMinId < displayMinId) {
+                    // 在头部插入新数据
+                    const newHeadLogs = filteredLogs.filter(log => log._id < displayMinId);
+                    if (newHeadLogs.length > 0) {
+                        prependTableRows(newHeadLogs);
+                        displayMinId = newDisplayMinId;
+                    }
+                }
+
+                if (newDisplayMaxId > displayMaxId) {
+                    // 在尾部插入新数据
+                    const newTailLogs = filteredLogs.filter(log => log._id > displayMaxId);
+                    if (newTailLogs.length > 0) {
+                        newTailLogs.forEach(addLogRow);
+                        displayMaxId = newDisplayMaxId;
+                    }
+                }
+            }
+
+            // 更新统计信息
+            totalEntries = filteredLogs.length;
+            document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
+            document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
+        }
+
+        // 修改现有的loadInitialData函数，使用新的缓存机制
+        function loadInitialData() {
+            fetchModuleHierarchy();
+            updateStats();
+
+            // 使用新的缓存机制加载初始数据
+            fetchLogsToCache(currentLimit)
+                .then(data => {
+                    const logs = data.logs || [];
+                    if (logs.length) {
+                        // 缓存已由fetchLogsToCache维护，现在更新显示
+                        updateDisplayFromCache();
+                        setTimeout(() => scrollToBottom(), 100);
+                    }
+                    setupEventSource();
+                })
+                .catch(error => {
+                    console.error('Initial log load failed, starting SSE without last_log_id', error);
+                    setupEventSource();
+                });
+        }
+
+        // 修改SSE事件处理，将数据合并到缓存
+        function setupEventSource() {
+            if (eventSource) eventSource.close();
+            updateConnectionStatus('connecting');
+
+            const params = new URLSearchParams();
+            params.append('last_log_id', lastReceivedId);
+            selectedLevels.forEach(l => params.append('level[]', l));
+            selectedModules.forEach(m => params.append('module[]', m));
+
+            const url = `/logger/api/stream?${params.toString()}`;
+            eventSource = new EventSource(url);
+
+            eventSource.onopen = () => updateConnectionStatus('connected');
+            eventSource.onerror = () => { updateConnectionStatus('error'); setTimeout(setupEventSource, 5000); };
+
+            eventSource.onmessage = (event) => {
+                if (!document.getElementById('autoRefresh').checked) return;
+                try {
+                    const raw = JSON.parse(event.data);
+                    const logs = Array.isArray(raw) ? raw : [raw];
+
+                    // 更新lastReceivedId
+                    const maxId = Math.max(...logs.map(l => l._id));
+                    if (Number.isFinite(maxId) && maxId > lastReceivedId) {
+                        lastReceivedId = maxId;
+                    }
+
+                    // 将新日志合并到缓存
+                    mergeLogsToCache(logs);
+
+                    // 从缓存更新显示
+                    updateDisplayFromCache();
+
+                    if (autoScrollEnabled && isNearBottom) scrollToBottom();
+                } catch (e) { console.error('SSE parse error', e); }
+            };
+        }
+
+        // 修改applyFilters函数，清空缓存并重新加载
+        function applyFilters() {
+            updateSelectedLevels();
+            updateSelectedModules();
+            updateFilterStatus();
+
+            // 清空缓存和显示状态
+            logCache = [];
+            cacheMinId = null;
+            cacheMaxId = null;
+            displayMinId = null;
+            displayMaxId = null;
+
+            clearLogTable();
+
+            // 关闭现有SSE连接
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            // 重新加载数据
+            fetchLogsToCache(currentLimit)
+                .then(() => {
+                    updateDisplayFromCache();
+                    setupEventSource();
+                })
+                .catch(error => {
+                    console.error('Error fetching logs after filter change', error);
+                    setupEventSource();
+                });
+        }
+
+        // 修改loadMoreLogs函数，使用新的缓存机制
+        function loadMoreLogs() {
+            if (isLoading || !hasMoreLogs) return;
+
+            const beforeHeight = document.getElementById('logTableBody').scrollHeight;
+
+            // 向前加载更多数据
+            fetchLogsToCache(-currentLimit)
+                .then(() => {
+                    // 从缓存更新显示
+                    updateDisplayFromCache();
+
+                    // 保持滚动位置
+                    const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                    document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
+                });
+        }
     </script>
 </body>
 </html>
