@@ -732,10 +732,8 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script><script>
         // Global variables
-        let currentStart = 0;
         let currentLimit = 100;
         let isLoading = false;
         let hasMoreLogs = true;
@@ -743,63 +741,55 @@
         let selectedModules = [];
         let selectedLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
         let observer = null;
-        let totalEntries = 0;
+        let totalEntries = 0; // This will now represent displayed entries
         let autoScrollEnabled = true;
         let isNearBottom = true;
-        let lastReceivedId = -1; // Track last received log ID
+        let lastReceivedId = -1; // Track last received log ID for SSE
         let moduleHierarchy = {}; // Store module hierarchy data
         let lastScrollTop = 0;      // 上一次滚动条位置
         let isScrollingUp = false;  // 方向
-        let oldestIndex = null;   // 当前列表里最小的绝对 id（index）
-        let newestIndex = null;   // 当前列表里最大的绝对 id（index）
-        let allLogs = [];
-
+    
         // 列配置管理
         let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
         let visibleColumns = ['asctime', 'levelname', 'module', 'message'];
         let columnOrder = ['asctime', 'levelname', 'module', 'message'];
-
+    
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
             initializeEventListeners();
-            loadInitialData();
-            setupScrollObserver();
+            loadInitialData(); // This will now use the refactored function
+            // setupScrollObserver();
+            ensureScrollObserver();
             setupScrollToBottom();
             initHeaderEditor();
             setupDragAndDrop();
             setInterval(updateStats, 30000);
         });
-
+    
         window.addEventListener('beforeunload', () => {
             if (eventSource) {
                 eventSource.close();
                 eventSource = null;
             }
         });
-
+    
         // Initialize event listeners
         function initializeEventListeners() {
             // Level checkbox listeners
             document.querySelectorAll('.level-checkbox').forEach(checkbox => {
                 checkbox.addEventListener('change', updateSelectedLevels);
             });
-
             var applyButton = document.querySelector('button[onclick="applyFilters()"]');
             if (applyButton) {
                 applyButton.addEventListener('click', applyFilters);
             }
-
             // 自动滚动按钮监听
             document.getElementById('autoScrollBtn').addEventListener('click', toggleAutoScroll);
-
             // 滚动到底部按钮监听
             document.getElementById('scrollToBottom').addEventListener('click', scrollToBottom);
-
             document.getElementById('applyColumnBtn').addEventListener('click', applyColumnSettings);
-
             // 监听滚动事件以检测是否接近底部
             document.querySelector('.log-entries-container').addEventListener('scroll', checkScrollPosition);
-
             // Auto-refresh toggle
             document.getElementById('autoRefresh').addEventListener('change', function() {
                 if (this.checked && !eventSource) {
@@ -810,12 +800,11 @@
                 }
             });
         }
-
+    
         // Toggle sidebar collapse/expand
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const icon = document.getElementById('sidebarIcon');
-
             sidebar.classList.toggle('collapsed');
             if (sidebar.classList.contains('collapsed')) {
                 icon.className = 'fas fa-chevron-right';
@@ -823,30 +812,32 @@
                 icon.className = 'fas fa-bars';
             }
         }
-
+    
         // Setup Intersection Observer for infinite scroll
         function setupScrollObserver() {
             if (observer) {
                 observer.disconnect();
             }
-
             const options = {
                 root: document.querySelector('.log-entries-container'),
                 rootMargin: '0px',
                 threshold: 0.1
             };
-
             observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    if (entry.isIntersecting              // 元素进入视口
-                        && hasMoreLogs && !isLoading      // 还有数据且空闲
-                        && isScrollingUp                  // 关键：必须是向上滚
-                        && oldestIndex > 0) {             // 还有更早的
-                        loadMoreLogs();                   // 拉旧数据
+                    // Check if there are older logs in the cache that are not displayed
+                    const oldestDisplayedLog = logCache.find(log => log._id === displayMinId);
+                    const canLoadMoreFromCache = oldestDisplayedLog && logCache.indexOf(oldestDisplayedLog) > 0;
+                    
+                    if (entry.isIntersecting          // 元素进入视口
+                        && !isLoading                 // 空闲
+                        && isScrollingUp              // 关键：必须是向上滚
+                        && (hasMoreLogs || canLoadMoreFromCache) // 还有更早的或缓存里有
+                    ) {
+                        loadMoreLogs();               // 拉旧数据
                     }
                 });
             }, options);
-
             const obsEl = document.getElementById('scrollObserver');
             if (obsEl) {
                 observer.observe(obsEl);
@@ -854,19 +845,16 @@
                 console.warn('scrollObserver 仍不存在，观测失败！');
             }
         }
-
+    
         function checkScrollPosition() {
             const container = document.querySelector('.log-entries-container');
             const scrollTop = container.scrollTop;
             const scrollHeight = container.scrollHeight;
             const clientHeight = container.clientHeight;
-
             isScrollingUp = scrollTop < lastScrollTop;
             lastScrollTop = scrollTop;
-
             // 如果距离底部小于100px，则认为接近底部
             isNearBottom = (scrollHeight - scrollTop - clientHeight) < 100;
-
             // 显示或隐藏"滚动到底部"按钮
             const scrollButton = document.getElementById('scrollToBottom');
             if (isNearBottom) {
@@ -878,24 +866,23 @@
                 scrollButton.classList.add('visible');
             }
         }
-
+    
         // 设置滚动到底部按钮
         function setupScrollToBottom() {
             // 初始检查位置
             checkScrollPosition();
         }
-
+    
         // 滚动到底部
         function scrollToBottom() {
             const container = document.querySelector('.log-entries-container');
             container.scrollTop = container.scrollHeight;
         }
-
+    
         // 切换自动滚动
         function toggleAutoScroll() {
             autoScrollEnabled = !autoScrollEnabled;
             const button = document.getElementById('autoScrollBtn');
-
             if (autoScrollEnabled) {
                 button.classList.add('active');
                 button.title = "自动滚动已启用";
@@ -905,84 +892,51 @@
                 button.title = "自动滚动已禁用";
             }
         }
-
+    
         // Update selected levels from checkboxes
         function updateSelectedLevels() {
             selectedLevels = Array.from(document.querySelectorAll('.level-checkbox:checked'))
                 .map(checkbox => checkbox.value.toUpperCase());
             console.log('Selected levels:', selectedLevels);
         }
-
-        // Load initial data
-        function loadInitialData() {
-            fetchModuleHierarchy();
-            updateStats();
-
-            // Load logs first, then setup SSE
-            fetchLogs(true)
-                .then(data => {
-                    /* 1. 记录边界索引（后端返回的是正序）*/
-                    const logs = data.logs;
-                    if (logs.length) {
-                        oldestIndex = logs[0]._id;          // 最小绝对 id
-                        newestIndex = logs[logs.length - 1]._id; // 最大绝对 id
-                    }
-
-                    /* 2. 滚动到底部 */
-                    setTimeout(() => scrollToBottom(), 100);
-
-                    /* 3. 启动实时推送 */
-                    setupEventSource();
-                })
-                .catch(error => {
-                    console.error('Initial log load failed, starting SSE without last_log_id', error);
-                    setupEventSource();
-                });
-        }
-
+    
         // Fetch module hierarchy
         function fetchModuleHierarchy() {
             const treeBox = document.getElementById('moduleTree');
-
             // ① 只替换 #moduleTree 内部，而不是把 parent 整个重写
             treeBox.innerHTML = `
                 <div class="text-center text-muted p-2">
                     <i class="fas fa-spinner fa-spin"></i> Loading modules...
                 </div>`;
-
             fetch('/logger/api/modules')
                 .then(r => r.json())
                 .then(d => {
                     moduleHierarchy = d.hierarchy;
-                    renderModuleTree(moduleHierarchy);   // 现在 treeBox 仍在，能正常渲染
+                    renderModuleTree(moduleHierarchy);  // 现在 treeBox 仍在，能正常渲染
                 })
                 .catch(e => {
                     treeBox.innerHTML = `<div class="text-danger small p-2">Error loading modules</div>`;
                 });
         }
-
+    
         // Refresh modules
         function refreshModules() {
             const moduleTree = document.getElementById('moduleTree');
             moduleTree.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Refreshing modules...</div>';
-
             fetchModuleHierarchy();
         }
-
+    
         function renderModuleTree(hierarchy) {
             console.count('renderModuleTree called');   // ←
             console.log('hierarchy', hierarchy);        // ←
-
             const box = document.getElementById('moduleTree');
-            box.innerHTML = '';          // 清空旧内容
-
+            box.innerHTML = '';         // 清空旧内容
             // 工具：递归创建节点
             function makeNode(name, children, depth = 0) {
                 const hasKids = children && children.length;
                 const nodeDiv = document.createElement('div');
                 nodeDiv.className = 'tree-node';
                 nodeDiv.style.marginLeft = depth * 16 + 'px';
-
                 // 行容器（点击整行可折叠）
                 const row = document.createElement('div');
                 row.className = 'tree-row d-flex align-items-center';
@@ -995,14 +949,12 @@
                     <label class="form-check-label flex-fill small" for="mod-${name}"
                            title="${name}">${name.split('.').pop()}</label>
                 `;
-
                 // 子容器（可折叠）
                 const childBox = document.createElement('div');
                 childBox.className = 'tree-children';
                 if (hasKids) {
                     children.forEach(c => childBox.appendChild(makeNode(c, hierarchy[c], depth + 1)));
                 }
-
                 // 折叠交互
                 if (hasKids) {
                     row.style.cursor = 'pointer';
@@ -1013,24 +965,20 @@
                     });
                     childBox.classList.add('expanded'); // 默认展开
                 }
-
                 nodeDiv.append(row, childBox);
                 console.log('treeBox children.length =', box.children.length);
-
                 return nodeDiv;
             }
-
             // 从 root 开始画
             const rootKids = hierarchy.root || [];
             rootKids.forEach(n => box.appendChild(makeNode(n, hierarchy[n])));
-
             // 绑定 checkbox 事件
             box.querySelectorAll('.module-checkbox').forEach(cb =>
                 cb.addEventListener('change', updateSelectedModules)
             );
             updateSelectedModules();   // 初始化已选数组
         }
-
+    
         // Select all modules
         function selectAllModules() {
             document.querySelectorAll('.module-checkbox').forEach(checkbox => {
@@ -1038,7 +986,7 @@
             });
             updateSelectedModules();
         }
-
+    
         // Deselect all modules
         function deselectAllModules() {
             document.querySelectorAll('.module-checkbox').forEach(checkbox => {
@@ -1046,94 +994,25 @@
             });
             updateSelectedModules();
         }
-
+    
         // Update selected modules array
         function updateSelectedModules() {
             selectedModules = Array.from(document.querySelectorAll('.module-checkbox:checked'))
                 .map(checkbox => checkbox.value);
             console.log('Selected modules:', selectedModules);
         }
-
-        // Apply filters and reload logs
-        function applyFilters() {
-            updateSelectedLevels();
-            updateSelectedModules();
-            updateFilterStatus();
-            clearLogTable();
-
-            // Close existing SSE connection
-            if (eventSource) {
-                eventSource.close();
-                eventSource = null;
-            }
-
-            // Reload logs with new filters
-            fetchLogs(false)
-                .then(() => {
-                    setupEventSource();
-                })
-                .catch(error => {
-                    console.error('Error fetching logs after filter change', error);
-                    setupEventSource();
-                });
-        }
-
+    
         // Update filter status display
         function updateFilterStatus() {
             const levelText = selectedLevels.length === 5 ? 'ALL' : selectedLevels.join(', ');
             const moduleText = selectedModules.length > 0 ? ` | Modules: ${selectedModules.length}` : '';
             document.getElementById('filterStatus').textContent = levelText + moduleText;
         }
-
-        function fetchLogs(reset = false) {
-            return new Promise((resolve, reject) => {
-                if (isLoading) return reject('busy');
-                isLoading = true;
-                document.getElementById('loadStatus').textContent = 'Loading…';
-
-                const params = new URLSearchParams();
-                if (reset) {
-                    params.set('limit', currentLimit);
-                } else {
-                    params.set('start_log_id', oldestIndex - currentLimit);
-                    params.set('limit', currentLimit);
-                }
-                selectedLevels.forEach(l => params.append('level[]', l));
-                selectedModules.forEach(m => params.append('module[]', m));
-
-                fetch('/logger/api/logs?' + params)
-                    .then(r => r.json())
-                    .then(data => {
-                        const {logs, total, hasMore} = data;
-                        if (reset) {
-                            allLogs = logs;
-                            renderTableBody();
-                            oldestIndex = logs.length ? logs[0]._id : null;
-                            newestIndex = logs.length ? logs[logs.length-1]._id : null;
-                        } else {
-                            allLogs.unshift(...logs);
-                            oldestIndex = logs.length ? logs[0]._id : oldestIndex;
-                            prependTableRows(logs);
-                        }
-                        hasMoreLogs = hasMore;
-                        totalEntries = total;
-                        isLoading = false;
-                        document.getElementById('loadStatus').textContent = '';
-                        resolve(data);
-                    })
-                    .catch(err => {
-                        isLoading = false;
-                        document.getElementById('loadStatus').textContent = 'Error';
-                        reject(err);
-                    });
-            });
-        }
-
+        
         // 更新加载状态
         function updateLoadStatus(message, type = 'info') {
             const statusElement = document.getElementById('loadStatus');
             statusElement.textContent = message;
-
             // 根据类型设置颜色
             statusElement.className = '';
             if (type === 'error') {
@@ -1144,15 +1023,13 @@
                 statusElement.classList.add('text-muted');
             }
         }
-
+    
         // 更新连接状态
         function updateConnectionStatus(status) {
             const statusElement = document.getElementById('connectionStatus');
             const collapsedStatusElement = document.getElementById('collapsedConnectionStatus');
-
             statusElement.className = 'status-indicator';
             collapsedStatusElement.className = 'status-indicator';
-
             switch(status) {
                 case 'connected':
                     statusElement.classList.add('status-connected');
@@ -1180,75 +1057,7 @@
                     break;
             }
         }
-
-         function setupEventSource() {
-            if (eventSource) eventSource.close();
-            updateConnectionStatus('connecting');
-
-            const params = new URLSearchParams();
-            params.append('last_log_id', lastReceivedId);
-            selectedLevels.forEach(l => params.append('level[]', l));
-            selectedModules.forEach(m => params.append('module[]', m));
-
-            const url = `/logger/api/stream?${params.toString()}`;
-            eventSource = new EventSource(url);
-
-            eventSource.onopen  = () => updateConnectionStatus('connected');
-            eventSource.onerror = () => { updateConnectionStatus('error'); setTimeout(setupEventSource, 5000); };
-
-            eventSource.onmessage = (event) => {
-                if (!document.getElementById('autoRefresh').checked) return;
-                try {
-                    const raw  = JSON.parse(event.data);
-                    const logs = Array.isArray(raw) ? raw : [raw];
-
-                    const maxId = Math.max(...logs.map(l => l._id));
-                    if (Number.isFinite(maxId) && maxId > lastReceivedId) {
-                        lastReceivedId = maxId;
-                    }
-
-                    const visible = logs.filter(isLogVisible);
-                    if (visible.length) {
-                        allLogs.push(...visible);
-                        visible.forEach(addLogRow);
-                        totalEntries += visible.length;
-                        document.getElementById('entryCount').textContent =
-                            `${totalEntries.toLocaleString()} Entries`;
-                        document.getElementById('mainEntryCount').textContent =
-                            `${totalEntries.toLocaleString()} Entries`;
-                        if (autoScrollEnabled && isNearBottom) scrollToBottom();
-                    }
-                } catch (e) { console.error('SSE parse error', e); }
-            };
-        }
-
-        function isLogVisible(log) {
-            const levelMatch = selectedLevels.includes(log.levelname);
-            const moduleMatch = selectedModules.length === 0 || selectedModules.includes(log.module);
-            return levelMatch && moduleMatch;
-        }
-
-        function filterLogs(logs) {
-            return logs.filter(log => {
-                const levelMatch = selectedLevels.includes(log.levelname);
-                const moduleMatch = selectedModules.length === 0 || 
-                                   selectedModules.includes(log.module);
-                return levelMatch && moduleMatch;
-            });
-        }
-
-        // Load more logs when scrolling up
-        function loadMoreLogs() {
-            if (isLoading || !hasMoreLogs) return;
-            const beforeHeight = document.getElementById('logTableBody').scrollHeight;
-            fetchLogs(false).then(() => {
-                // 保持视觉锚点：滚动条停在旧行位置
-                const afterHeight = document.getElementById('logTableBody').scrollHeight;
-                document.querySelector('.log-entries-container').scrollTop +=
-                    afterHeight - beforeHeight;
-            });
-        }
-
+    
         // Update statistics panel
         function updateStats() {
             fetch('/logger/api/stats')
@@ -1265,7 +1074,6 @@
                         <div class="stats-item">
                             <strong>Level Distribution:</strong>
                     `;
-
                     for (const [level, count] of Object.entries(data.levelCounts)) {
                         const percentage = data.totalEntries > 0 ? 
                             ((count / data.totalEntries) * 100).toFixed(1) : 0;
@@ -1276,16 +1084,13 @@
                             </div>
                         `;
                     }
-
                     html += `</div>`;
-
                     // Add module statistics if available
                     if (data.moduleCounts) {
                         html += `<div class="stats-item"><strong>Top Modules:</strong></div>`;
                         const sortedModules = Object.entries(data.moduleCounts)
                             .sort((a, b) => b[1] - a[1])
                             .slice(0, 5); // Show top 5 modules
-
                         sortedModules.forEach(([module, count]) => {
                             const percentage = data.totalEntries > 0 ? 
                                 ((count / data.totalEntries) * 100).toFixed(1) : 0;
@@ -1297,7 +1102,6 @@
                             `;
                         });
                     }
-
                     document.getElementById('statsPanel').innerHTML = html;
                 })
                 .catch(error => {
@@ -1306,7 +1110,7 @@
                         '<div class="text-center text-danger">Error loading statistics</div>';
                 });
         }
-
+    
         // 初始化表头编辑器
         function initHeaderEditor() {
             // 从localStorage加载保存的设置
@@ -1320,19 +1124,16 @@
                     console.error('Error loading column settings:', e);
                 }
             }
-
             // 设置表头编辑器按钮点击事件
             document.getElementById('headerEditorBtn').addEventListener('click', function(e) {
                 e.stopPropagation();
                 const dropdown = document.getElementById('headerEditorDropdown');
                 dropdown.classList.toggle('show');
-
                 if (dropdown.classList.contains('show')) {
                     renderColumnEditor();
                     setupColumnEventDelegation();
                 }
             });
-
             // 点击页面其他区域关闭下拉框
             document.addEventListener('click', function(e) {
                 const dropdown = document.getElementById('headerEditorDropdown');
@@ -1342,21 +1143,17 @@
                     dropdown.classList.remove('show');
                 }
             });
-
             // 初始化表头
             renderTableHeader();
         }
-
+    
         function renderColumnEditor() {
             const columnList = document.getElementById('columnList');
             columnList.innerHTML = '';
-
             // 1. 按现有顺序把 columnOrder 里“还活着”的字段先摆好
             const existInOrder = columnOrder.filter(c => availableColumns.includes(c));
-
             // 2. 把 availableColumns 里“从未出现过”的新字段追加到末尾
             const newColumns = availableColumns.filter(c => !columnOrder.includes(c));
-
             // 3. 合并成“本次真正要画”的列表，同时把新字段写回 columnOrder（仅内存）
             const columnsToRender = [...existInOrder, ...newColumns];
             if (newColumns.length) {
@@ -1368,7 +1165,6 @@
                     console.error('Failed to save columnOrder:', e);
                 }
             }
-
             // 4. 画 DOM
             columnsToRender.forEach(column => {
                 const isChecked = visibleColumns.includes(column);
@@ -1385,11 +1181,10 @@
                 columnList.appendChild(div);
             });
         }
-
+    
         // 设置拖拽排序功能
         function setupDragAndDrop() {
             const columnList = document.getElementById('columnList');
-
             // 委托事件，列表项是动态生成的没关系
             columnList.addEventListener('dragstart', e => {
                 const item = e.target.closest('.column-item');
@@ -1398,91 +1193,73 @@
                 e.dataTransfer.setData('text/plain', item.dataset.column); // 只传列名
                 item.classList.add('dragging');
             });
-
             columnList.addEventListener('dragend', e => {
                 const item = e.target.closest('.column-item');
                 if (item) item.classList.remove('dragging');
             });
-
             columnList.addEventListener('dragover', e => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
             });
-
             columnList.addEventListener('drop', e => {
                 e.preventDefault();
                 const draggedColumn = e.dataTransfer.getData('text/plain'); // 拿到列名
                 if (!draggedColumn) return;
-
                 const targetItem = document.elementFromPoint(e.clientX, e.clientY)
-                                           ?.closest('.column-item');
+                                          ?.closest('.column-item');
                 if (!targetItem || targetItem.dataset.column === draggedColumn) return;
-
                 const allColumns = Array.from(columnList.querySelectorAll('.column-item'))
-                                        .map(el => el.dataset.column);
-
+                                         .map(el => el.dataset.column);
                 const srcIndex = allColumns.indexOf(draggedColumn);
                 const tgtIndex = allColumns.indexOf(targetItem.dataset.column);
-
                 if (srcIndex === -1 || tgtIndex === -1) return; // 保险
-
                 // 更新顺序
                 columnOrder.splice(srcIndex, 1);
                 columnOrder.splice(tgtIndex, 0, draggedColumn);
-
                 // 重新渲染
                 renderColumnEditor();
             });
         }
-
+    
         // 应用列设置
         function applyColumnSettings() {
             const checkboxes = document.querySelectorAll('.column-checkbox:checked');
             visibleColumns = Array.from(checkboxes).map(cb => cb.id.replace('col-', ''));
-
             // 保存设置到localStorage
             const settings = {
                 visibleColumns: visibleColumns,
                 columnOrder: columnOrder
             };
-
             try {
                 localStorage.setItem('logViewerColumnSettings', JSON.stringify(settings));
                 console.log('Settings saved:', settings);
             } catch (e) {
                 console.error('Failed to save settings to localStorage:', e);
             }
-
             // 更新表头
             renderTableHeader();
-
-            // 重新渲染现有日志
-            renderTableBody();
-
+            // **MODIFIED**: Re-render logs from cache using the new column settings
+            updateDisplayFromCache();
             // 关闭下拉框
             document.getElementById('headerEditorDropdown').classList.remove('show');
         }
-
+    
         // 渲染表头
         function renderTableHeader() {
             const headerRow = document.getElementById('logTableHeader');
             headerRow.innerHTML = '';
-
-            visibleColumns.forEach(column => {
+            // Use columnOrder to respect the order, but only show visibleColumns
+            const orderedVisibleColumns = columnOrder.filter(col => visibleColumns.includes(col));
+            orderedVisibleColumns.forEach(column => {
                 const th = document.createElement('th');
                 th.textContent = column;
                 th.dataset.column = column;
                 headerRow.appendChild(th);
             });
         }
-
+    
         function extractAvailableColumns(logs) {
-            const allFields = new Set();
-
-            // 确保包含已知的基本字段，即使它们尚未在日志中出现
-            const baseFields = ['asctime', 'levelname', 'module', 'message', 'funcName'];
-            baseFields.forEach(field => allFields.add(field));
-
+            const allFields = new Set(availableColumns); // Start with existing known columns
             // 从日志数据中提取其他所有可能字段
             if (logs && logs.length > 0) {
                 logs.forEach(log => {
@@ -1497,18 +1274,19 @@
             // 更新全局变量
             availableColumns = Array.from(allFields);
         }
-
-        function renderTableBody() {
+        
+        // **MODIFIED**: Accepts logs array to render
+        function renderTableBody(logs) {
             const tbody = document.getElementById('logTableBody');
             tbody.innerHTML = '';
-            allLogs.filter(isLogVisible).forEach(log => addLogRow(log));
+            logs.forEach(log => addLogRow(log));
             ensureScrollObserver();
         }
-
+        
+        // **MODIFIED**: Removed internal filtering
         function prependTableRows(logs) {
             const tbody = document.getElementById('logTableBody');
             logs
-                .filter(isLogVisible)
                 .reverse()                  // 先插最旧的，顺序才不会颠倒
                 .forEach(log => {
                     const tr = createLogRow(log);
@@ -1516,14 +1294,14 @@
                 });
             ensureScrollObserver();
         }
-
+    
         function createLogRow(log) {
             const tr = document.createElement('tr');
             tr.className = `log-level-${log.levelname}`;
-
-            visibleColumns.forEach(column => {
+            // Use columnOrder to respect the order, but only show visibleColumns
+            const orderedVisibleColumns = columnOrder.filter(col => visibleColumns.includes(col));
+            orderedVisibleColumns.forEach(column => {
                 const td = document.createElement('td');
-
                 // 统一使用 innerHTML 避免冲突
                 if (column === 'levelname') {
                     td.innerHTML = `<span class="level-badge badge-${log.levelname}">${log.levelname}</span>`;
@@ -1535,54 +1313,29 @@
                     // 直接设置内容
                     td.textContent = log[column] || '';
                 }
-
                 tr.appendChild(td);
             });
-
             return tr
         }
-
+    
         // 添加日志行到表格
         function addLogRow(log) {
             const tbody = document.getElementById('logTableBody');
             tbody.appendChild(createLogRow(log));
         }
-
-        function renderLogs(logs, reset = false) {
-            // 提取可用字段
-            extractAvailableColumns(logs);
-
-            const tbody = document.getElementById('logTableBody');
-
-            if (reset) {
-                tbody.innerHTML = '';
-            }
-
-            logs.forEach(log => {
-                if (isLogVisible(log)) {
-                    addLogRow(log);
-                }
-            });
-
-            ensureScrollObserver();
-        }
-
+    
         function clearLogTable() {
             const tbody = document.getElementById('logTableBody');
             if (tbody) {
                 tbody.innerHTML = '';
             }
-
             // 重置计数器和其他状态
-            currentStart = 0;
-            hasMoreLogs = true;
             totalEntries = 0;
-
             // 更新界面显示
             document.getElementById('entryCount').textContent = '0 Entries';
             document.getElementById('mainEntryCount').textContent = '0 Entries';
         }
-
+    
         function ensureScrollObserver(){
             let obsEl = document.getElementById('scrollObserver');
             if (!obsEl) {
@@ -1591,7 +1344,6 @@
                 obsEl.className = 'scroll-observer';
                 obsEl.style.height = '1px';
             }
-
             // 重新插到 tbody 最前面
             const tbody = document.getElementById('logTableBody');
             if (tbody.firstChild) {
@@ -1599,13 +1351,11 @@
             } else {
                 tbody.appendChild(obsEl);
             }
-
             setupScrollObserver();
         }
-
+    
         function setupColumnEventDelegation() {
             const columnList = document.getElementById('columnList');
-
             // 处理复选框的点击事件（事件委托）
             columnList.addEventListener('change', function(e) {
                 if (e.target && e.target.classList.contains('column-checkbox')) {
@@ -1613,100 +1363,94 @@
                     console.log('Checkbox changed:', e.target.id, e.target.checked);
                 }
             });
-
-            // 处理应用按钮的点击事件
-            document.getElementById('applyColumnBtn').addEventListener('click', applyColumnSettings);
+            // Note: apply button listener is already set globally
         }
-
+    
         function expandAllModules(expanded = true) {
             document.querySelectorAll('.tree-children').forEach(box => {
                 box.classList.toggle('expanded', expanded);
                 box.previousElementSibling.querySelector('.tree-toggle')
-                     .classList.toggle('collapsed', !expanded);
+                   .classList.toggle('collapsed', !expanded);
             });
         }
-
-        // -------------------------------------------------------------------------------------------------------------
-
+    
+        // --------------------------------------------- 重构后的函数 -----------------------------------------------------
         // 全局缓存相关变量
         let logCache = []; // 按_id升序排列的日志缓存
         let cacheMinId = null; // 缓存中最小_id
         let cacheMaxId = null; // 缓存中最大_id
-
         // 显示列表相关变量
         let displayMinId = null; // 当前显示的最小_id
         let displayMaxId = null; // 当前显示的最大_id
-
+    
         /**
          * 将日志合并到缓存中，保持按_id升序排列
          * @param {Array} newLogs - 新的日志数组
          */
         function mergeLogsToCache(newLogs) {
             if (!newLogs || newLogs.length === 0) return;
-
             // 确保newLogs是数组
             const logs = Array.isArray(newLogs) ? newLogs : [newLogs];
-
             // 如果缓存为空，直接设置
             if (logCache.length === 0) {
                 logCache = logs.sort((a, b) => a._id - b._id);
+            } else {
+                // 合并并去重
+                const idSet = new Set(logCache.map(log => log._id));
+                const uniqueNewLogs = logs.filter(log => !idSet.has(log._id));
+                if (uniqueNewLogs.length === 0) return;
+                // 合并到缓存并重新排序
+                logCache = logCache.concat(uniqueNewLogs).sort((a, b) => a._id - b._id);
+            }
+            
+            if (logCache.length > 0) {
                 cacheMinId = logCache[0]._id;
                 cacheMaxId = logCache[logCache.length - 1]._id;
-                return;
             }
-
-            // 合并并去重
-            const idSet = new Set(logCache.map(log => log._id));
-            const uniqueNewLogs = logs.filter(log => !idSet.has(log._id));
-
-            if (uniqueNewLogs.length === 0) return;
-
-            // 合并到缓存
-            logCache = logCache.concat(uniqueNewLogs)
-                              .sort((a, b) => a._id - b._id);
-
-            // 更新缓存边界
-            cacheMinId = Math.min(cacheMinId, ...uniqueNewLogs.map(log => log._id));
-            cacheMaxId = Math.max(cacheMaxId, ...uniqueNewLogs.map(log => log._id));
         }
-
+    
         /**
          * 从接口获取日志数据并合并到缓存
-         * @param {number} count - 获取数量，正数为向后获取，负数为向前获取
+         * @param {number} startId - The starting log ID.
+         * @param {number} count - 获取数量.
          */
-        function fetchLogsToCache(count) {
+        function fetchLogsToCache(startId, count) {
             return new Promise((resolve, reject) => {
                 if (isLoading) return reject('busy');
                 isLoading = true;
                 document.getElementById('loadStatus').textContent = 'Loading…';
 
                 const params = new URLSearchParams();
+    
+                // The number of logs to get is always positive
+                params.set('count', Math.abs(count));
 
-                // 根据count正负决定获取方向
-                if (count > 0) {
-                    // 向后获取：从cacheMaxId开始
-                    const start = cacheMaxId !== null ? cacheMaxId + 1 : 0;
-                    params.set('start_log_id', start);
-                    params.set('limit', count);
-                } else {
-                    // 向前获取：从cacheMinId向前获取abs(count)条
-                    const absCount = Math.abs(count);
-                    const start = cacheMinId !== null ? Math.max(0, cacheMinId - absCount) : 0;
-                    params.set('start_log_id', start);
-                    params.set('limit', absCount);
+                // Calculate the correct starting point
+                if (startId != null) {
+                    let finalStartId = startId;
+                    if (count < 0) {
+                        // If fetching backwards, calculate the new starting point.
+                        // e.g., if startId is 100 and count is -20, the new start is 80.
+                        finalStartId = startId + count;
+                    }
+                    // Ensure the ID is not negative
+                    params.set('start_log_id', Math.max(0, finalStartId));
                 }
-
-                // 不应用filter，获取原始数据
-                fetch('/logger/api/modules?' + params)
+                
+                // Note: Filters are not applied here. We fetch all logs and filter on the client.
+                fetch('/logger/api/logs?' + params)
                     .then(r => r.json())
                     .then(data => {
-                        const { logs } = data;
+                        const { logs, has_more } = data;
+                        // TODO: has more logs implements issue.
+                        // hasMoreLogs = has_more; // Update global hasMoreLogs status
                         if (logs && logs.length > 0) {
+                            extractAvailableColumns(logs); // Dynamically find columns
                             mergeLogsToCache(logs);
                         }
                         isLoading = false;
                         document.getElementById('loadStatus').textContent = '';
-                        resolve(data);
+                        resolve({ logs: logs || [], hasMore: has_more });
                     })
                     .catch(err => {
                         isLoading = false;
@@ -1715,7 +1459,7 @@
                     });
             });
         }
-
+    
         /**
          * 基于缓存更新显示列表，应用filter筛选
          */
@@ -1724,70 +1468,54 @@
                 clearLogTable();
                 return;
             }
-
+            
             // 应用filter筛选需要显示的日志
             const filteredLogs = logCache.filter(log => {
                 const levelMatch = selectedLevels.includes(log.levelname);
-                const moduleMatch = selectedModules.length === 0 ||
-                                   selectedModules.includes(log.module);
+                const moduleMatch = selectedModules.length === 0 || selectedModules.some(m => log.module.startsWith(m));
                 return levelMatch && moduleMatch;
             });
-
+    
             if (filteredLogs.length === 0) {
                 clearLogTable();
                 displayMinId = null;
                 displayMaxId = null;
                 return;
             }
-
-            // 计算显示列表的边界
-            const newDisplayMinId = filteredLogs[0]._id;
-            const newDisplayMaxId = filteredLogs[filteredLogs.length - 1]._id;
-
-            // 判断更新策略
-            if (displayMinId === null || displayMaxId === null) {
-                // 初次显示或重置
-                renderTableBody(filteredLogs);
-                displayMinId = newDisplayMinId;
-                displayMaxId = newDisplayMaxId;
+    
+            const currentIds = new Set(Array.from(document.getElementById('logTableBody').children)
+                                           .map(row => row.dataset.logId)
+                                           .filter(Boolean)
+                                           .map(Number));
+            const filteredIds = new Set(filteredLogs.map(log => log._id));
+    
+            // Full re-render if it's simpler (e.g., column changes) or initial load
+            // For simplicity and correctness, we will do a full re-render on every update.
+            // Incremental updates are complex to get right with filtering.
+            renderTableBody(filteredLogs);
+            
+            if (filteredLogs.length > 0) {
+                displayMinId = filteredLogs[0]._id;
+                displayMaxId = filteredLogs[filteredLogs.length - 1]._id;
             } else {
-                // 增量更新
-                if (newDisplayMinId < displayMinId) {
-                    // 在头部插入新数据
-                    const newHeadLogs = filteredLogs.filter(log => log._id < displayMinId);
-                    if (newHeadLogs.length > 0) {
-                        prependTableRows(newHeadLogs);
-                        displayMinId = newDisplayMinId;
-                    }
-                }
-
-                if (newDisplayMaxId > displayMaxId) {
-                    // 在尾部插入新数据
-                    const newTailLogs = filteredLogs.filter(log => log._id > displayMaxId);
-                    if (newTailLogs.length > 0) {
-                        newTailLogs.forEach(addLogRow);
-                        displayMaxId = newDisplayMaxId;
-                    }
-                }
+                displayMinId = null;
+                displayMaxId = null;
             }
-
+            
             // 更新统计信息
             totalEntries = filteredLogs.length;
             document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
             document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
         }
-
-        // 修改现有的loadInitialData函数，使用新的缓存机制
+    
+        // **REFACTORED**: Use the new cache mechanism
         function loadInitialData() {
             fetchModuleHierarchy();
             updateStats();
-
-            // 使用新的缓存机制加载初始数据
-            fetchLogsToCache(currentLimit)
+            // Fetch latest logs. Start from 0, get `currentLimit` logs forward.
+            fetchLogsToCache(null, currentLimit)
                 .then(data => {
-                    const logs = data.logs || [];
-                    if (logs.length) {
-                        // 缓存已由fetchLogsToCache维护，现在更新显示
+                    if (data.logs && data.logs.length) {
                         updateDisplayFromCache();
                         setTimeout(() => scrollToBottom(), 100);
                     }
@@ -1798,95 +1526,113 @@
                     setupEventSource();
                 });
         }
+    
+        // **重写后的、更优化的代码**
+        function loadMoreLogs() {
+            if (isLoading) return; // 只需要一个加载守卫
 
-        // 修改SSE事件处理，将数据合并到缓存
+            const beforeHeight = document.getElementById('logTableBody').scrollHeight;
+
+            // 1. 检查是否可以从缓存加载
+            const oldestDisplayedLogIndex = logCache.findIndex(log => log._id === displayMinId);
+            if (oldestDisplayedLogIndex > 0) {
+                console.log("Loading more logs from cache...");
+                // 从缓存中取出更早的日志来显示（这里只是一个简化的例子，实际应由 updateDisplayFromCache 处理）
+                // 简单地触发一次显示更新即可
+                updateDisplayFromCache();
+                
+                // 恢复滚动位置
+                const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
+                return; // 从缓存加载完成，结束
+            }
+
+            // 2. 如果缓存到顶，且服务器还有，则从网络加载
+            if (hasMoreLogs) {
+                console.log("Fetching more logs from server...");
+                const startId = cacheMinId;
+                if (startId === null || startId === 0) {
+                    hasMoreLogs = false;
+                    return;
+                }
+
+                fetchLogsToCache(startId, -currentLimit)
+                    .then(() => {
+                        updateDisplayFromCache();
+                        // 恢复滚动位置
+                        const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                        document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
+                    });
+            } else {
+                console.log("No more logs on server.");
+            }
+        }
+    
+        // **REFACTORED**: Merge data into cache
         function setupEventSource() {
             if (eventSource) eventSource.close();
             updateConnectionStatus('connecting');
-
+            
+            // Use cacheMaxId as the starting point for streaming
+            const lastId = cacheMaxId !== null ? cacheMaxId : -1;
+            
             const params = new URLSearchParams();
-            params.append('last_log_id', lastReceivedId);
-            selectedLevels.forEach(l => params.append('level[]', l));
-            selectedModules.forEach(m => params.append('module[]', m));
-
+            params.append('last_log_id', lastId);
+    
             const url = `/logger/api/stream?${params.toString()}`;
             eventSource = new EventSource(url);
-
-            eventSource.onopen = () => updateConnectionStatus('connected');
-            eventSource.onerror = () => { updateConnectionStatus('error'); setTimeout(setupEventSource, 5000); };
-
+    
+            eventSource.onopen  = () => updateConnectionStatus('connected');
+            eventSource.onerror = () => { 
+                updateConnectionStatus('error'); 
+                eventSource.close();
+                setTimeout(setupEventSource, 5000); 
+            };
+            
             eventSource.onmessage = (event) => {
                 if (!document.getElementById('autoRefresh').checked) return;
                 try {
-                    const raw = JSON.parse(event.data);
+                    const raw  = JSON.parse(event.data);
                     const logs = Array.isArray(raw) ? raw : [raw];
-
-                    // 更新lastReceivedId
-                    const maxId = Math.max(...logs.map(l => l._id));
-                    if (Number.isFinite(maxId) && maxId > lastReceivedId) {
-                        lastReceivedId = maxId;
+                    
+                    if (logs.length > 0) {
+                         // 将新日志合并到缓存
+                        mergeLogsToCache(logs);
+                        // 从缓存更新显示
+                        updateDisplayFromCache();
+                        if (autoScrollEnabled && isNearBottom) scrollToBottom();
                     }
-
-                    // 将新日志合并到缓存
-                    mergeLogsToCache(logs);
-
-                    // 从缓存更新显示
-                    updateDisplayFromCache();
-
-                    if (autoScrollEnabled && isNearBottom) scrollToBottom();
+                   
                 } catch (e) { console.error('SSE parse error', e); }
             };
         }
-
-        // 修改applyFilters函数，清空缓存并重新加载
+    
+        // **REFACTORED**: Clear cache and reload
         function applyFilters() {
             updateSelectedLevels();
             updateSelectedModules();
             updateFilterStatus();
-
+    
+            // With a central cache, we don't need to re-fetch, just re-render.
+            // However, to ensure we have all relevant data if filters are broadened,
+            // it's safer to clear and reload.
+            
             // 清空缓存和显示状态
             logCache = [];
             cacheMinId = null;
             cacheMaxId = null;
             displayMinId = null;
             displayMaxId = null;
-
             clearLogTable();
-
+    
             // 关闭现有SSE连接
             if (eventSource) {
                 eventSource.close();
                 eventSource = null;
             }
-
+    
             // 重新加载数据
-            fetchLogsToCache(currentLimit)
-                .then(() => {
-                    updateDisplayFromCache();
-                    setupEventSource();
-                })
-                .catch(error => {
-                    console.error('Error fetching logs after filter change', error);
-                    setupEventSource();
-                });
-        }
-
-        // 修改loadMoreLogs函数，使用新的缓存机制
-        function loadMoreLogs() {
-            if (isLoading || !hasMoreLogs) return;
-
-            const beforeHeight = document.getElementById('logTableBody').scrollHeight;
-
-            // 向前加载更多数据
-            fetchLogsToCache(-currentLimit)
-                .then(() => {
-                    // 从缓存更新显示
-                    updateDisplayFromCache();
-
-                    // 保持滚动位置
-                    const afterHeight = document.getElementById('logTableBody').scrollHeight;
-                    document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
-                });
+            loadInitialData();
         }
     </script>
 </body>
