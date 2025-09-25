@@ -326,7 +326,7 @@ def run_all_tests(duration_minutes=5):
 
     # Run for specified duration
     try:
-        time.sleep(duration_minutes * 60)
+        time.sleep(duration_minutes * 600)
     except KeyboardInterrupt:
         logger.info("Test interrupted by user")
     finally:

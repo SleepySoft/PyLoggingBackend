@@ -185,7 +185,7 @@ class LoggerBackend:
                 # Check for new entries
                 if self.log_wrapper.check_updates(current_last_id):
                     new_entries = self.log_wrapper.get_logs(
-                        start_log_id=last_log_id + 1,
+                        start_log_id=current_last_id + 1,
                         count=limit
                     )
 

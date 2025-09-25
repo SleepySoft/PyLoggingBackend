@@ -696,7 +696,9 @@
                 </div>
             </div>
 
-            <div class="log-entries-container" id="logEntries">
+            <!-- 日志显示区 -->
+            <div class="log-entries-container">
+                <!-- 工具栏 -->
                 <div class="log-header">
                     <h6 class="mb-0">Log Entries</h6>
                     <button class="header-editor-btn" id="headerEditorBtn">
@@ -705,26 +707,17 @@
                     <div class="header-editor-dropdown" id="headerEditorDropdown">
                         <h6>Select Visible Columns</h6>
                         <div id="columnList"></div>
-                        <button class="btn btn-sm btn-primary mt-2" onclick="applyColumnSettings()">Apply</button>
+                        <button class="btn btn-sm btn-primary mt-2" id="applyColumnBtn">Apply</button>
                     </div>
                 </div>
 
-                <div class="scroll-observer" id="scrollObserver"></div>
-
+                <!-- 表格 -->
                 <div class="table-responsive">
                     <table class="log-table">
-                        <thead id="logTableHeader">
-                            <!-- 表头将由JavaScript动态生成 -->
-                        </thead>
-                        <tbody id="logTableBody">
-                            <!-- 日志行将由JavaScript动态生成 -->
-                        </tbody>
+                        <thead id="logTableHeader"></thead>
+                        <tbody id="logTableBody"></tbody>
                     </table>
                 </div>
-            </div>
-
-            <div class="text-center p-3 text-muted" id="initialLoading">
-                <i class="fas fa-spinner fa-spin"></i> Loading logs...
             </div>
 
             <div class="log-controls">
@@ -759,6 +752,12 @@
         let isScrollingUp = false;  // 方向
         let oldestIndex = null;   // 当前列表里最小的绝对 id（index）
         let newestIndex = null;   // 当前列表里最大的绝对 id（index）
+        let allLogs = [];
+
+        // 列配置管理
+        let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
+        let visibleColumns = ['asctime', 'levelname', 'module', 'message'];
+        let columnOrder = ['asctime', 'levelname', 'module', 'message'];
 
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
@@ -796,6 +795,8 @@
             // 滚动到底部按钮监听
             document.getElementById('scrollToBottom').addEventListener('click', scrollToBottom);
 
+            document.getElementById('applyColumnBtn').addEventListener('click', applyColumnSettings);
+
             // 监听滚动事件以检测是否接近底部
             document.querySelector('.log-entries-container').addEventListener('scroll', checkScrollPosition);
 
@@ -825,6 +826,10 @@
 
         // Setup Intersection Observer for infinite scroll
         function setupScrollObserver() {
+            if (observer) {
+                observer.disconnect();
+            }
+
             const options = {
                 root: document.querySelector('.log-entries-container'),
                 rootMargin: '0px',
@@ -836,15 +841,17 @@
                     if (entry.isIntersecting              // 元素进入视口
                         && hasMoreLogs && !isLoading      // 还有数据且空闲
                         && isScrollingUp                  // 关键：必须是向上滚
-                        && currentStart > 0) {            // 还有更早的
+                        && oldestIndex > 0) {             // 还有更早的
                         loadMoreLogs();                   // 拉旧数据
                     }
                 });
             }, options);
 
-            const observerElement = document.getElementById('scrollObserver');
-            if (observerElement) {
-                observer.observe(observerElement);
+            const obsEl = document.getElementById('scrollObserver');
+            if (obsEl) {
+                observer.observe(obsEl);
+            } else {
+                console.warn('scrollObserver 仍不存在，观测失败！');
             }
         }
 
@@ -1078,51 +1085,36 @@
             document.getElementById('filterStatus').textContent = levelText + moduleText;
         }
 
-        function prependLogRow(log) {
-            const tbody = document.getElementById('logTableBody');
-            const tr = createLogRow(log);   // 复用你已有的 createLogRow
-            tbody.insertBefore(tr, tbody.firstChild);
-        }
-
         function fetchLogs(reset = false) {
             return new Promise((resolve, reject) => {
-                if (isLoading) { reject('busy'); return; }
-
+                if (isLoading) return reject('busy');
                 isLoading = true;
                 document.getElementById('loadStatus').textContent = 'Loading…';
 
                 const params = new URLSearchParams();
-                /* 关键：reset 时从最新开始；加载更旧时从“oldestIndex”往前推 */
                 if (reset) {
-                    // 不写start参数则取最新
                     params.set('limit', currentLimit);
                 } else {
-                    // 向后端要 “start=oldestIndex” 开始往后 limit 条
-                    // 因为后端 index 是 0→N（越老越小），所以这样就是“更旧”
                     params.set('start_log_id', oldestIndex - currentLimit);
                     params.set('limit', currentLimit);
                 }
-
                 selectedLevels.forEach(l => params.append('level[]', l));
                 selectedModules.forEach(m => params.append('module[]', m));
 
                 fetch('/logger/api/logs?' + params)
                     .then(r => r.json())
                     .then(data => {
-                        const { logs, total, hasMore } = data;
-
+                        const {logs, total, hasMore} = data;
                         if (reset) {
-                            clearLogTable();
-                            renderLogs(logs, true);
-                            // 更新边界
-                            newestIndex = logs.length ? logs[logs.length - 1]._id : null;
+                            allLogs = logs;
+                            renderTableBody();
                             oldestIndex = logs.length ? logs[0]._id : null;
+                            newestIndex = logs.length ? logs[logs.length-1]._id : null;
                         } else {
-                            // 更旧数据 → 直接插到 tbody 最前面
-                            logs.forEach(log => prependLogRow(log));
-                            if (logs.length) oldestIndex = logs[0]._id;
+                            allLogs.unshift(...logs);
+                            oldestIndex = logs.length ? logs[0]._id : oldestIndex;
+                            prependTableRows(logs);
                         }
-
                         hasMoreLogs = hasMore;
                         totalEntries = total;
                         isLoading = false;
@@ -1189,84 +1181,44 @@
             }
         }
 
-        // 设置事件源（Server-Sent Events）
-        function setupEventSource() {
-            if (eventSource) {
-                eventSource.close();
-            }
-
+         function setupEventSource() {
+            if (eventSource) eventSource.close();
             updateConnectionStatus('connecting');
 
-            // Build query parameters with last_log_id and filters
             const params = new URLSearchParams();
             params.append('last_log_id', lastReceivedId);
-
-            selectedLevels.forEach(level => {
-                params.append('level[]', level);
-            });
-
-            selectedModules.forEach(module => {
-                params.append('module[]', module);
-            });
+            selectedLevels.forEach(l => params.append('level[]', l));
+            selectedModules.forEach(m => params.append('module[]', m));
 
             const url = `/logger/api/stream?${params.toString()}`;
-            console.log('Setting up SSE with URL:', url);
-
             eventSource = new EventSource(url);
 
-            eventSource.addEventListener('open', () => {
-                console.log('SSE connection established');
-                updateConnectionStatus('connected');
-            });
+            eventSource.onopen  = () => updateConnectionStatus('connected');
+            eventSource.onerror = () => { updateConnectionStatus('error'); setTimeout(setupEventSource, 5000); };
 
-            eventSource.addEventListener('error', (err) => {
-                console.error('SSE connection error:', err);
-                updateConnectionStatus('error');
-                // Try to reconnect
-                setTimeout(setupEventSource, 5000);
-            });
-
-            eventSource.onopen = function() {
-                console.log('SSE连接已建立');
-                updateConnectionStatus('connected');
-                updateLoadStatus('实时更新中');
-            };
-
-            eventSource.onmessage = function(event) {
+            eventSource.onmessage = (event) => {
                 if (!document.getElementById('autoRefresh').checked) return;
-
                 try {
-                    const rawData = JSON.parse(event.data);
-                    let logs = [];
+                    const raw  = JSON.parse(event.data);
+                    const logs = Array.isArray(raw) ? raw : [raw];
 
-                    // 确保 logs 变量总是一个数组
-                    if (Array.isArray(rawData)) {
-                        logs = rawData;
-                    } else {
-                        // 如果收到的不是数组，则将其包装成一个数组
-                        logs = [rawData];
+                    const maxId = Math.max(...logs.map(l => l._id));
+                    if (Number.isFinite(maxId) && maxId > lastReceivedId) {
+                        lastReceivedId = maxId;
                     }
 
-                    logs.forEach(log => {
-                        // Update lastReceivedId regardless of visibility (using the ID of the last log in the batch)
-                        // If you want to track the highest ID across all received logs, you might need a different logic
-                        lastReceivedId = log._id; // This will be updated for each log in the batch, effectively storing the last one's ID.
-
-                        if (isLogVisible(log, selectedLevels, selectedModules)) {
-                            addNewLogEntry(log);
-
-                            // Update statistics for each visible log
-                            totalEntries++;
-                            document.getElementById('entryCount').textContent =
-                                `${totalEntries.toLocaleString()} Entries`;
-                            document.getElementById('mainEntryCount').textContent =
-                                `${totalEntries.toLocaleString()} Entries`;
-                        }
-                    });
-
-                } catch (error) {
-                    console.error('Error parsing SSE message:', error);
-                }
+                    const visible = logs.filter(isLogVisible);
+                    if (visible.length) {
+                        allLogs.push(...visible);
+                        visible.forEach(addLogRow);
+                        totalEntries += visible.length;
+                        document.getElementById('entryCount').textContent =
+                            `${totalEntries.toLocaleString()} Entries`;
+                        document.getElementById('mainEntryCount').textContent =
+                            `${totalEntries.toLocaleString()} Entries`;
+                        if (autoScrollEnabled && isNearBottom) scrollToBottom();
+                    }
+                } catch (e) { console.error('SSE parse error', e); }
             };
         }
 
@@ -1283,51 +1235,6 @@
                                    selectedModules.includes(log.module);
                 return levelMatch && moduleMatch;
             });
-        }
-
-        // 添加新的日志条目
-        function addNewLogEntry(log) {
-            if (!isLogVisible(log)) {
-                return;
-            }
-
-            const container = document.getElementById('logEntries');
-            const logElement = createLogElement(log);
-
-            // 添加到容器
-            container.appendChild(logElement);
-
-            // 如果自动滚动启用且用户接近底部，滚动到底部
-            if (autoScrollEnabled && isNearBottom) {
-                setTimeout(() => {
-                    scrollToBottom();
-                }, 50);
-            }
-
-            // 移除初始加载提示（如果存在）
-            document.getElementById('initialLoading').style.display = 'none';
-        }
-
-        // 创建日志元素
-        function createLogElement(log) {
-            const logElement = document.createElement('div');
-            logElement.className = `log-entry log-level-${log.levelname}`;
-
-            let html = `<span class="timestamp">${log.asctime}</span>`;
-            html += `<span class="level-badge badge-${log.levelname}">${log.levelname}</span>`;
-
-            if (log.module) {
-                html += `<span class="module" title="${log.module}">${log.module}</span>`;
-            }
-
-            html += `<span>${log.message}</span>`;
-
-            if (log.funcName) {
-                html += ` <small class="text-muted">(${log.funcName})</small>`;
-            }
-
-            logElement.innerHTML = html;
-            return logElement;
         }
 
         // Load more logs when scrolling up
@@ -1399,11 +1306,6 @@
                         '<div class="text-center text-danger">Error loading statistics</div>';
                 });
         }
-
-        // 列配置管理
-        let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
-        let visibleColumns = ['asctime', 'levelname', 'module', 'message'];
-        let columnOrder = ['asctime', 'levelname', 'module', 'message'];
 
         // 初始化表头编辑器
         function initHeaderEditor() {
@@ -1484,27 +1386,6 @@
             });
         }
 
-<!--        // 渲染列编辑器-->
-<!--        function renderColumnEditor() {-->
-<!--            const columnList = document.getElementById('columnList');-->
-<!--            columnList.innerHTML = '';-->
-
-<!--            columnOrder.forEach(column => {-->
-<!--                const isChecked = visibleColumns.includes(column);-->
-<!--                const div = document.createElement('div');-->
-<!--                div.className = 'column-item';-->
-<!--                div.dataset.column = column;-->
-<!--                div.draggable = true;-->
-<!--                div.innerHTML = `-->
-<!--                    <span class="column-handle"><i class="fas fa-grip-vertical"></i></span>-->
-<!--                    <input type="checkbox" class="column-checkbox" id="col-${column}"-->
-<!--                           ${isChecked ? 'checked' : ''}>-->
-<!--                    <label for="col-${column}">${column}</label>-->
-<!--                `;-->
-<!--                columnList.appendChild(div);-->
-<!--            });-->
-<!--        }-->
-
         // 设置拖拽排序功能
         function setupDragAndDrop() {
             const columnList = document.getElementById('columnList');
@@ -1576,7 +1457,7 @@
             renderTableHeader();
 
             // 重新渲染现有日志
-            rerenderLogs();
+            renderTableBody();
 
             // 关闭下拉框
             document.getElementById('headerEditorDropdown').classList.remove('show');
@@ -1617,56 +1498,26 @@
             availableColumns = Array.from(allFields);
         }
 
-        // 重新渲染所有日志（当列设置改变时）
-        function rerenderLogs() {
+        function renderTableBody() {
             const tbody = document.getElementById('logTableBody');
             tbody.innerHTML = '';
-
-            // 获取所有日志条目（需要根据您的实际数据结构调整）
-            const logEntries = document.querySelectorAll('.log-entry');
-
-            logEntries.forEach(logEntry => {
-                // 这里需要根据您的实际日志数据结构来提取数据
-                // 这只是一个示例实现
-                const logData = {
-                    asctime: logEntry.querySelector('.timestamp')?.textContent,
-                    levelname: logEntry.querySelector('.level-badge')?.textContent,
-                    module: logEntry.querySelector('.module')?.textContent,
-                    message: logEntry.querySelector('span:last-child')?.textContent
-                };
-
-                addLogRow(logData);
-            });
+            allLogs.filter(isLogVisible).forEach(log => addLogRow(log));
+            ensureScrollObserver();
         }
 
-        // 修改现有的addNewLogEntry函数
-        function addNewLogEntry(log) {
-            if (!isLogVisible(log)) {
-                return;
-            }
-
-            // 添加到表格中
-            addLogRow(log);
-
-            // 更新条目计数
-            totalEntries++;
-            document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
-            document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
-
-            // 如果自动滚动启用且用户接近底部，滚动到底部
-            if (autoScrollEnabled && isNearBottom) {
-                setTimeout(() => {
-                    scrollToBottom();
-                }, 50);
-            }
-
-            // 移除初始加载提示（如果存在）
-            document.getElementById('initialLoading').style.display = 'none';
-        }
-
-        // 添加日志行到表格
-        function addLogRow(log) {
+        function prependTableRows(logs) {
             const tbody = document.getElementById('logTableBody');
+            logs
+                .filter(isLogVisible)
+                .reverse()                  // 先插最旧的，顺序才不会颠倒
+                .forEach(log => {
+                    const tr = createLogRow(log);
+                    tbody.insertBefore(tr, tbody.firstChild);
+                });
+            ensureScrollObserver();
+        }
+
+        function createLogRow(log) {
             const tr = document.createElement('tr');
             tr.className = `log-level-${log.levelname}`;
 
@@ -1688,7 +1539,13 @@
                 tr.appendChild(td);
             });
 
-            tbody.appendChild(tr);
+            return tr
+        }
+
+        // 添加日志行到表格
+        function addLogRow(log) {
+            const tbody = document.getElementById('logTableBody');
+            tbody.appendChild(createLogRow(log));
         }
 
         function renderLogs(logs, reset = false) {
@@ -1726,17 +1583,24 @@
             document.getElementById('mainEntryCount').textContent = '0 Entries';
         }
 
-        function ensureScrollObserver() {
-            if (!document.getElementById('scrollObserver')) {
-                const observerElement = document.createElement('div');
-                observerElement.className = 'scroll-observer';
-                observerElement.id = 'scrollObserver';
-                document.getElementById('logEntries').appendChild(observerElement);
-
-                if (observer) {
-                    observer.observe(observerElement);
-                }
+        function ensureScrollObserver(){
+            let obsEl = document.getElementById('scrollObserver');
+            if (!obsEl) {
+                obsEl = document.createElement('div');
+                obsEl.id = 'scrollObserver';
+                obsEl.className = 'scroll-observer';
+                obsEl.style.height = '1px';
             }
+
+            // 重新插到 tbody 最前面
+            const tbody = document.getElementById('logTableBody');
+            if (tbody.firstChild) {
+                tbody.insertBefore(obsEl, tbody.firstChild);
+            } else {
+                tbody.appendChild(obsEl);
+            }
+
+            setupScrollObserver();
         }
 
         function setupColumnEventDelegation() {
