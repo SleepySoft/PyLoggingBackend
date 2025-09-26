@@ -1460,49 +1460,70 @@
             });
         }
     
-        /**
-         * 基于缓存更新显示列表，应用filter筛选
+         /**
+         * 基于缓存更新显示列表。
+         * @param {object} [options={}] - 更新选项
+         * @param {boolean} [options.reset=false] - 如果为true，则强制全量刷新列表
          */
-        function updateDisplayFromCache() {
-            if (logCache.length === 0) {
-                clearLogTable();
-                return;
-            }
-            
-            // 应用filter筛选需要显示的日志
+        function updateDisplayFromCache(options = {}) {
+            const { reset = false } = options;
+
+            // 1. [过滤]：获取应该显示的日志列表
             const filteredLogs = logCache.filter(log => {
                 const levelMatch = selectedLevels.includes(log.levelname);
                 const moduleMatch = selectedModules.length === 0 || selectedModules.some(m => log.module.startsWith(m));
                 return levelMatch && moduleMatch;
             });
-    
+
+            // 2. [处理空状态]
             if (filteredLogs.length === 0) {
                 clearLogTable();
                 displayMinId = null;
                 displayMaxId = null;
+                // ... (更新统计信息)
+                totalEntries = 0;
+                document.getElementById('entryCount').textContent = `0 Entries`;
+                document.getElementById('mainEntryCount').textContent = `0 Entries`;
                 return;
             }
-    
-            const currentIds = new Set(Array.from(document.getElementById('logTableBody').children)
-                                           .map(row => row.dataset.logId)
-                                           .filter(Boolean)
-                                           .map(Number));
-            const filteredIds = new Set(filteredLogs.map(log => log._id));
-    
-            // Full re-render if it's simpler (e.g., column changes) or initial load
-            // For simplicity and correctness, we will do a full re-render on every update.
-            // Incremental updates are complex to get right with filtering.
-            renderTableBody(filteredLogs);
-            
-            if (filteredLogs.length > 0) {
-                displayMinId = filteredLogs[0]._id;
-                displayMaxId = filteredLogs[filteredLogs.length - 1]._id;
-            } else {
-                displayMinId = null;
-                displayMaxId = null;
+
+            // 3. [计算新边界]
+            const newDisplayMinId = filteredLogs[0]._id;
+            const newDisplayMaxId = filteredLogs[filteredLogs.length - 1]._id;
+
+            // 4. [决定更新策略]
+            // 如果是强制重置，或是首次加载，则执行全量更新
+            if (reset || displayMinId === null) {
+                renderTableBody(filteredLogs);
             }
-            
-            // 更新统计信息
+            // 否则，执行增量更新
+            else {
+                // 在头部追加 (Prepend)
+                if (newDisplayMinId < displayMinId) {
+                    const logsToPrepend = filteredLogs.filter(log => log._id < displayMinId);
+                    if (logsToPrepend.length > 0) {
+                        const beforeHeight = document.getElementById('logTableBody').scrollHeight;
+                        prependTableRows(logsToPrepend);
+                        const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                        document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
+                    }
+                }
+                // 在尾部追加 (Append)
+                if (newDisplayMaxId > displayMaxId) {
+                    const logsToAppend = filteredLogs.filter(log => log._id > displayMaxId);
+                    if (logsToAppend.length > 0) {
+                        const wasNearBottom = isNearBottom;
+                        logsToAppend.forEach(addLogRow);
+                        if (autoScrollEnabled && wasNearBottom) {
+                            scrollToBottom();
+                        }
+                    }
+                }
+            }
+
+            // 5. [更新状态和统计]
+            displayMinId = newDisplayMinId;
+            displayMaxId = newDisplayMaxId;
             totalEntries = filteredLogs.length;
             document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
             document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
@@ -1612,27 +1633,18 @@
             updateSelectedLevels();
             updateSelectedModules();
             updateFilterStatus();
-    
-            // With a central cache, we don't need to re-fetch, just re-render.
-            // However, to ensure we have all relevant data if filters are broadened,
-            // it's safer to clear and reload.
-            
-            // 清空缓存和显示状态
-            logCache = [];
-            cacheMinId = null;
-            cacheMaxId = null;
-            displayMinId = null;
-            displayMaxId = null;
-            clearLogTable();
-    
-            // 关闭现有SSE连接
-            if (eventSource) {
-                eventSource.close();
-                eventSource = null;
+
+            updateDisplayFromCache({ reset: true });
+
+            // 注意：因为 updateDisplayFromCache 现在会处理清空和重绘的全部逻辑，
+            // 我们不再需要在这里手动清空缓存或表格。
+            // SSE连接的重启逻辑可以保留
+            if (document.getElementById('autoRefresh').checked) {
+                if (eventSource) {
+                    eventSource.close();
+                }
+                setupEventSource();
             }
-    
-            // 重新加载数据
-            loadInitialData();
         }
     </script>
 </body>
