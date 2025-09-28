@@ -739,8 +739,6 @@
         let isLoading = false;
         let hasMoreLogs = true;
         let eventSource = null;
-        let selectedModules = [];
-        let selectedLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
         let observer = null;
         let totalEntries = 0; // This will now represent displayed entries
         let autoScrollEnabled = true;
@@ -779,9 +777,9 @@
         // Initialize event listeners
         function initializeEventListeners() {
             // Level checkbox listeners
-            document.querySelectorAll('.level-checkbox').forEach(checkbox => {
-                checkbox.addEventListener('change', updateSelectedLevels);
-            });
+            // document.querySelectorAll('.level-checkbox').forEach(checkbox => {
+            //     checkbox.addEventListener('change', updateSelectedLevels);
+            // });
             var applyButton = document.querySelector('button[onclick="applyFilters()"]');
             if (applyButton) {
                 applyButton.addEventListener('click', applyFilters);
@@ -903,32 +901,6 @@
             }
         }
 
-        // Update selected levels from checkboxes
-        function updateSelectedLevels() {
-            selectedLevels = Array.from(document.querySelectorAll('.level-checkbox:checked'))
-                .map(checkbox => checkbox.value.toUpperCase());
-            console.log('Selected levels:', selectedLevels);
-        }
-
-        // Fetch module hierarchy
-        function fetchModuleHierarchy() {
-            const treeBox = document.getElementById('moduleTree');
-            // ① 只替换 #moduleTree 内部，而不是把 parent 整个重写
-            treeBox.innerHTML = `
-                <div class="text-center text-muted p-2">
-                    <i class="fas fa-spinner fa-spin"></i> Loading modules...
-                </div>`;
-            fetch('/logger/api/modules')
-                .then(r => r.json())
-                .then(d => {
-                    moduleHierarchy = d.hierarchy;
-                    renderModuleTree(moduleHierarchy);  // 现在 treeBox 仍在，能正常渲染
-                })
-                .catch(e => {
-                    treeBox.innerHTML = `<div class="text-danger small p-2">Error loading modules</div>`;
-                });
-        }
-
         // Refresh modules
         function refreshModules() {
             const moduleTree = document.getElementById('moduleTree');
@@ -981,10 +953,10 @@
             const rootKids = hierarchy.root || [];
             rootKids.forEach(n => box.appendChild(makeNode(n, hierarchy[n])));
             // 绑定 checkbox 事件
-            box.querySelectorAll('.module-checkbox').forEach(cb =>
-                cb.addEventListener('change', updateSelectedModules)
-            );
-            updateSelectedModules();   // 初始化已选数组
+            // box.querySelectorAll('.module-checkbox').forEach(cb =>
+            //     cb.addEventListener('change', updateSelectedModules)
+            // );
+            // updateSelectedModules();   // 初始化已选数组
         }
 
         // Select all modules
@@ -992,7 +964,7 @@
             document.querySelectorAll('.module-checkbox').forEach(checkbox => {
                 checkbox.checked = true;
             });
-            updateSelectedModules();
+            // updateSelectedModules();
         }
 
         // Deselect all modules
@@ -1000,21 +972,7 @@
             document.querySelectorAll('.module-checkbox').forEach(checkbox => {
                 checkbox.checked = false;
             });
-            updateSelectedModules();
-        }
-
-        // Update selected modules array
-        function updateSelectedModules() {
-            selectedModules = Array.from(document.querySelectorAll('.module-checkbox:checked'))
-                .map(checkbox => checkbox.value);
-            console.log('Selected modules:', selectedModules);
-        }
-
-        // Update filter status display
-        function updateFilterStatus() {
-            const levelText = selectedLevels.length === 5 ? 'ALL' : selectedLevels.join(', ');
-            const moduleText = selectedModules.length > 0 ? ` | Modules: ${selectedModules.length}` : '';
-            document.getElementById('filterStatus').textContent = levelText + moduleText;
+            // updateSelectedModules();
         }
 
         // 更新加载状态
@@ -1246,8 +1204,8 @@
             }
             // 更新表头
             renderTableHeader();
-            // **MODIFIED**: Re-render logs from cache using the new column settings
-            updateDisplayFromCache();
+            // **MODIFIED**: Force a full re-render of the table body to reflect new column settings
+            updateDisplayFromCache({ reset: true });
             // 关闭下拉框
             document.getElementById('headerEditorDropdown').classList.remove('show');
         }
@@ -1283,7 +1241,6 @@
             availableColumns = Array.from(allFields);
         }
 
-        // **MODIFIED**: Accepts logs array to render
         function renderTableBody(logs) {
             const tbody = document.getElementById('logTableBody');
             tbody.innerHTML = '';
@@ -1291,7 +1248,6 @@
             ensureScrollObserver();
         }
 
-        // **MODIFIED**: Removed internal filtering
         function prependTableRows(logs) {
             const tbody = document.getElementById('logTableBody');
             logs
@@ -1307,11 +1263,15 @@
             const tr = document.createElement('tr');
             tr.className = `log-level-${log.levelname}`;
             tr.dataset.logId = log._id; // Add ID for state tracking
-            // Use columnOrder to respect the order, but only show visibleColumns
+
+            // Set initial visibility based on current filters
+            if (!isLogVisible(log)) {
+                tr.style.display = 'none';
+            }
+
             const orderedVisibleColumns = columnOrder.filter(col => visibleColumns.includes(col));
             orderedVisibleColumns.forEach(column => {
                 const td = document.createElement('td');
-                // 统一使用 innerHTML 避免冲突
                 if (column === 'levelname') {
                     td.innerHTML = `<span class="level-badge badge-${log.levelname}">${log.levelname}</span>`;
                 } else if (column === 'asctime') {
@@ -1319,7 +1279,6 @@
                 } else if (column === 'module' && log.module) {
                     td.innerHTML = `<span class="module" title="${log.module}">${log.module}</span>`;
                 } else {
-                    // 直接设置内容
                     td.textContent = log[column] || '';
                 }
                 tr.appendChild(td);
@@ -1327,7 +1286,6 @@
             return tr;
         }
 
-        // 添加日志行到表格
         // --- MODIFIED: `addLogRow` now enforces the display limit ---
         function addLogRow(log) {
             const tbody = document.getElementById('logTableBody');
@@ -1397,17 +1355,14 @@
         // --------------------------------------------- 重构后的函数 -----------------------------------------------------
         // 全局缓存相关变量
         let logCache = []; // 按_id升序排列的日志缓存
+        let logCacheMap = new Map(); // For fast ID-based lookups
         let cacheMinId = null; // 缓存中最小_id
         let cacheMaxId = null; // 缓存中最大_id
         // 显示列表相关变量
         let displayMinId = null; // 当前显示的最小_id
         let displayMaxId = null; // 当前显示的最大_id
 
-        /**
-         * 将日志合并到缓存中，保持按_id升序排列
-         * @param {Array} newLogs - 新的日志数组
-         */
-        // --- MODIFIED: `mergeLogsToCache` now trims the cache to MAX_LOG_LIMIT ---
+        // --- MODIFIED: `mergeLogsToCache` now also updates the lookup map and trims the cache ---
         function mergeLogsToCache(newLogs) {
             if (!newLogs || newLogs.length === 0) return;
             // 确保newLogs是数组
@@ -1424,13 +1379,15 @@
                 logCache = logCache.concat(uniqueNewLogs).sort((a, b) => a._id - b._id);
             }
 
-            // Enforce cache size limit
+            // Enforce cache size limit by removing the oldest logs
             if (logCache.length > MAX_LOG_LIMIT) {
                 logCache.splice(0, logCache.length - MAX_LOG_LIMIT);
             }
 
-            // Update cache boundaries AFTER merging and trimming
+            // Rebuild the lookup map and update boundaries
+            logCacheMap.clear();
             if (logCache.length > 0) {
+                logCache.forEach(log => logCacheMap.set(log._id, log));
                 cacheMinId = logCache[0]._id;
                 cacheMaxId = logCache[logCache.length - 1]._id;
             } else {
@@ -1498,16 +1455,8 @@
          // --- MODIFIED: `updateDisplayFromCache` uses new limit-respecting functions ---
         function updateDisplayFromCache(options = {}) {
             const { reset = false } = options;
-
-            // 1. [过滤]：获取应该显示的日志列表
-            const filteredLogs = logCache.filter(log => {
-                const levelMatch = selectedLevels.includes(log.levelname);
-                const moduleMatch = selectedModules.length === 0 || selectedModules.some(m => log.module.startsWith(m));
-                return levelMatch && moduleMatch;
-            });
-
-            // 2. [处理空状态]
-            if (filteredLogs.length === 0) {
+            
+            if (logCache.length === 0) {
                 clearLogTable();
                 displayMinId = null;
                 displayMaxId = null;
@@ -1519,20 +1468,20 @@
             }
 
             // 3. [计算新边界] - Filtered log is not way larger than full log.
-            const newDisplayMinId = filteredLogs[0]._id;
-            const newDisplayMaxId = filteredLogs[filteredLogs.length - 1]._id;
+            const newDisplayMinId = logCache[0]._id;
+            const newDisplayMaxId = logCache[logCache.length - 1]._id;
 
             // 4. [决定更新策略]
             // 如果是强制重置，或是首次加载，则执行全量更新
             if (reset || displayMinId === null) {
                 console.log("Render log table - FULL.");
-                renderTableBody(filteredLogs);
+                renderTableBody(logCache);
             }
             // 否则，执行增量更新
             else {
                 // 在头部追加 (Prepend)
                 if (newDisplayMinId < displayMinId) {
-                    const logsToPrepend = filteredLogs.filter(log => log._id < displayMinId);
+                    const logsToPrepend = logCache.filter(log => log._id < displayMinId);
                     console.log("Render log table - Head ", logsToPrepend.length);
 
                     if (logsToPrepend.length > 0) {
@@ -1544,7 +1493,7 @@
                 }
                 // 在尾部追加 (Append)
                 if (newDisplayMaxId > displayMaxId) {
-                    const logsToAppend = filteredLogs.filter(log => log._id > displayMaxId);
+                    const logsToAppend = logCache.filter(log => log._id > displayMaxId);
                     console.log("Render log table - Tail ", logsToAppend.length);
 
                     if (logsToAppend.length > 0) {
@@ -1600,7 +1549,7 @@
         function loadMoreLogs() {
             if (isLoading) return; // 只需要一个加载守卫
 
-            const beforeHeight = document.getElementById('logTableBody').scrollHeight;
+            // const beforeHeight = document.getElementById('logTableBody').scrollHeight;
 
             // 1. 检查是否可以从缓存加载
             const oldestDisplayedLogIndex = logCache.findIndex(log => log._id === displayMinId);
@@ -1610,10 +1559,10 @@
                 // 简单地触发一次显示更新即可
                 updateDisplayFromCache();
 
-                // 恢复滚动位置
-                const afterHeight = document.getElementById('logTableBody').scrollHeight;
-                document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
-                return; // 从缓存加载完成，结束
+                // // 恢复滚动位置
+                // const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                // document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
+                // return; // 从缓存加载完成，结束
             }
 
             // 2. 如果缓存到顶，且服务器还有，则从网络加载
@@ -1629,8 +1578,8 @@
                     .then(() => {
                         updateDisplayFromCache();
                         // 恢复滚动位置
-                        const afterHeight = document.getElementById('logTableBody').scrollHeight;
-                        document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
+                        // const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                        // document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
                     });
             } else {
                 console.log("No more logs on server.");
@@ -1676,23 +1625,104 @@
             };
         }
 
-        // **REFACTORED**: Clear cache and reload
+        // ----------------------------------------- Filter Related -----------------------------------------
+
+        let selectedLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
+        let selectedModules = [];
+
+        /**
+         * NEW: Central function to check if a log matches the current filters.
+         * @param {object} log The log object to check.
+         * @returns {boolean} True if the log should be visible.
+         */
+        function isLogVisible(log) {
+            if (!log) return false;
+            const levelMatch = selectedLevels.includes(log.levelname);
+            const moduleMatch = selectedModules.length === 0 || selectedModules.some(m => log.module && log.module.startsWith(m));
+            return levelMatch && moduleMatch;
+        }
+
+        /**
+         * NEW: Iterates through the DOM to apply filters by hiding/showing rows.
+         */
+        function applyFiltersToDOM() {
+            const rows = document.getElementById('logTableBody').querySelectorAll('tr[data-log-id]');
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const logId = parseInt(row.dataset.logId, 10);
+                const log = logCacheMap.get(logId);
+                if (isLogVisible(log)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Update the displayed entry count
+            totalEntries = visibleCount;
+            document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
+            document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
+        }
+
+        // --- REWRITTEN `applyFilters` ---
         function applyFilters() {
+            // 1. Update filter state from UI (no visual change yet)
             updateSelectedLevels();
             updateSelectedModules();
             updateFilterStatus();
 
-            updateDisplayFromCache({ reset: true });
+            // 2. Apply the new filters to the existing DOM
+            console.log("Applying filters by toggling visibility...");
+            applyFiltersToDOM();
 
-            // 注意：因为 updateDisplayFromCache 现在会处理清空和重绘的全部逻辑，
-            // 我们不再需要在这里手动清空缓存或表格。
-            // SSE连接的重启逻辑可以保留
+            // 3. Restart SSE with new filters if it's active
             if (document.getElementById('autoRefresh').checked) {
                 if (eventSource) {
                     eventSource.close();
                 }
                 setupEventSource();
             }
+        }
+
+        // Update selected levels from checkboxes
+        function updateSelectedLevels() {
+            selectedLevels = Array.from(document.querySelectorAll('.level-checkbox:checked'))
+                .map(checkbox => checkbox.value.toUpperCase());
+            console.log('Selected levels:', selectedLevels);
+        }
+
+        // Fetch module hierarchy
+        function fetchModuleHierarchy() {
+            const treeBox = document.getElementById('moduleTree');
+            // ① 只替换 #moduleTree 内部，而不是把 parent 整个重写
+            treeBox.innerHTML = `
+                <div class="text-center text-muted p-2">
+                    <i class="fas fa-spinner fa-spin"></i> Loading modules...
+                </div>`;
+            fetch('/logger/api/modules')
+                .then(r => r.json())
+                .then(d => {
+                    moduleHierarchy = d.hierarchy;
+                    renderModuleTree(moduleHierarchy);  // 现在 treeBox 仍在，能正常渲染
+                })
+                .catch(e => {
+                    treeBox.innerHTML = `<div class="text-danger small p-2">Error loading modules</div>`;
+                });
+        }
+
+        // Update selected modules array
+        function updateSelectedModules() {
+            selectedModules = Array.from(document.querySelectorAll('.module-checkbox:checked'))
+                .map(checkbox => checkbox.value);
+            console.log('Selected modules:', selectedModules);
+        }
+
+        // Update filter status display
+        function updateFilterStatus() {
+            const levelText = selectedLevels.length === 5 ? 'ALL' : selectedLevels.join(', ');
+            const moduleText = selectedModules.length > 0 ? ` | Modules: ${selectedModules.length}` : '';
+            document.getElementById('filterStatus').textContent = levelText + moduleText;
         }
     </script>
 </body>
