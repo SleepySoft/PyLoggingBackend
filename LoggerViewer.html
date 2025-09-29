@@ -85,8 +85,59 @@
           text-align: center;
           transition: transform .2s;
         }
+
         .tree-toggle.collapsed {
           transform: rotate(-90deg);
+        }
+
+        .tree-node {
+            padding: 4px 0;
+        }
+
+        .tree-label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 2px 0;
+        }
+
+        .tree-label:hover {
+            background-color: #f0f0f0;
+        }
+
+        .tree-children {
+            margin-left: 20px;
+            overflow: hidden;
+            transition: max-height 0.25s ease-out;
+            max-height: 0;
+        }
+
+        .tree-children.expanded {
+            max-height: 2000px;
+        }
+
+        .tree-toggle {
+            display: inline-block;
+            width: 16px;
+            text-align: center;
+            margin-right: 4px;
+            transition: transform 0.2s;
+        }
+
+        .tree-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .tree-checkbox {
+            margin-right: 5px;
+        }
+
+        .tree-badge {
+            margin-left: auto;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            padding: 0 6px;
+            font-size: 0.8em;
         }
 
         /* 1. 让“模块”这张 card 占满侧边栏剩余空间 */
@@ -628,10 +679,42 @@
                             </div>
                         </div>
 
-                        <!-- Module Tree -->
+                        <!-- 模块树配置区域 -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                <i class="fas fa-cog"></i> Module Configuration
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Level 1 Column:</label>
+                                    <select class="form-select" id="moduleLevel1">
+                                        <option value="">-- Select Column --</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Level 2 Column:</label>
+                                    <select class="form-select" id="moduleLevel2">
+                                        <option value="">-- Select Column --</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Level 3 Column:</label>
+                                    <select class="form-select" id="moduleLevel3">
+                                        <option value="">-- Select Column --</option>
+                                    </select>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshColumnOptions()">
+                                        <i class="fas fa-sync-alt"></i> Refresh Columns
+                                    </button>
+                                    <button class="btn btn-sm btn-primary" onclick="generateModuleTree()">
+                                        <i class="fas fa-tree"></i> Generate Tree
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
 
-                        <!-- 替换掉原来的 “Module Tree” filter-section -->
-                        <div class="card module-panel">          <!-- 新增类 module-panel -->
+                        <div class="card module-panel">
                           <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                             <span><i class="fas fa-sitemap"></i> Modules</span>
                             <button class="btn btn-sm btn-light" onclick="expandAllModules()">
@@ -748,7 +831,11 @@
         let lastScrollTop = 0;      // 上一次滚动条位置
         let isScrollingUp = false;  // 方向
 
-        // --- NEW: Configuration for performance limits ---
+        // 模块层级配置
+        let moduleLevel1 = '';
+        let moduleLevel2 = '';
+        let moduleLevel3 = '';
+
         const MAX_LOG_LIMIT = 5000; // Maximum number of logs to keep in cache and display
 
         // 列配置管理
@@ -776,10 +863,6 @@
 
         // Initialize event listeners
         function initializeEventListeners() {
-            // Level checkbox listeners
-            // document.querySelectorAll('.level-checkbox').forEach(checkbox => {
-            //     checkbox.addEventListener('change', updateSelectedLevels);
-            // });
             var applyButton = document.querySelector('button[onclick="applyFilters()"]');
             if (applyButton) {
                 applyButton.addEventListener('click', applyFilters);
@@ -901,11 +984,93 @@
             }
         }
 
-        // Refresh modules
-        function refreshModules() {
-            const moduleTree = document.getElementById('moduleTree');
-            moduleTree.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Refreshing modules...</div>';
-            fetchModuleHierarchy();
+        // 刷新列选项下拉框
+        function refreshColumnOptions() {
+            const level1Select = document.getElementById('moduleLevel1');
+            const level2Select = document.getElementById('moduleLevel2');
+            const level3Select = document.getElementById('moduleLevel3');
+
+            // 保存当前选中的值
+            const currentLevel1 = level1Select.value;
+            const currentLevel2 = level2Select.value;
+            const currentLevel3 = level3Select.value;
+
+            // 清空选项
+            level1Select.innerHTML = '<option value="">-- Select Column --</option>';
+            level2Select.innerHTML = '<option value="">-- Select Column --</option>';
+            level3Select.innerHTML = '<option value="">-- Select Column --</option>';
+
+            // 添加新选项
+            availableColumns.forEach(column => {
+                const option1 = document.createElement('option');
+                option1.value = column;
+                option1.textContent = column;
+                if (column === currentLevel1) option1.selected = true;
+                level1Select.appendChild(option1);
+
+                const option2 = document.createElement('option');
+                option2.value = column;
+                option2.textContent = column;
+                if (column === currentLevel2) option2.selected = true;
+                level2Select.appendChild(option2);
+
+                const option3 = document.createElement('option');
+                option3.value = column;
+                option3.textContent = column;
+                if (column === currentLevel3) option3.selected = true;
+                level3Select.appendChild(option3);
+            });
+        }
+
+        // 生成模块树
+        function generateModuleTree() {
+            const level1 = document.getElementById('moduleLevel1').value;
+            const level2 = document.getElementById('moduleLevel2').value;
+            const level3 = document.getElementById('moduleLevel3').value;
+
+            if (!level1 && !level2 && !level3) {
+                alert('Please select at least one column for module hierarchy');
+                return;
+            }
+
+            moduleLevel1 = level1;
+            moduleLevel2 = level2;
+            moduleLevel3 = level3;
+
+            buildModuleHierarchy();
+        }
+
+        // 构建模块层次结构
+        function buildModuleHierarchy() {
+            const hierarchy = {};
+
+            // 遍历所有日志
+            logCache.forEach(log => {
+                let path = [];
+
+                // 根据配置的层级添加路径元素
+                if (moduleLevel1 && log[moduleLevel1]) {
+                    path.push(log[moduleLevel1]);
+                }
+                if (moduleLevel2 && log[moduleLevel2]) {
+                    path.push(log[moduleLevel2]);
+                }
+                if (moduleLevel3 && log[moduleLevel3]) {
+                    path.push(log[moduleLevel3]);
+                }
+
+                // 构建树结构
+                let currentLevel = hierarchy;
+                path.forEach((segment, index) => {
+                    if (!currentLevel[segment]) {
+                        currentLevel[segment] = {};
+                    }
+                    currentLevel = currentLevel[segment];
+                });
+            });
+
+            moduleHierarchy = hierarchy;
+            renderModuleTree(moduleHierarchy);
         }
 
         function renderModuleTree(hierarchy) {
@@ -913,7 +1078,7 @@
             box.innerHTML = '';         // 清空旧内容
             // 工具：递归创建节点
             function makeNode(name, children, depth = 0) {
-                const hasKids = children && children.length;
+                const hasKids = children && Object.keys(children).length > 0;
                 const nodeDiv = document.createElement('div');
                 nodeDiv.className = 'tree-node';
                 nodeDiv.style.marginLeft = depth * 16 + 'px';
@@ -927,13 +1092,15 @@
                     <input class="form-check-input module-checkbox ms-1" type="checkbox"
                            value="${name}" id="mod-${name}">
                     <label class="form-check-label flex-fill small" for="mod-${name}"
-                           title="${name}">${name.split('.').pop()}</label>
+                           title="${name}">${name}</label>
                 `;
                 // 子容器（可折叠）
                 const childBox = document.createElement('div');
                 childBox.className = 'tree-children';
                 if (hasKids) {
-                    children.forEach(c => childBox.appendChild(makeNode(c, hierarchy[c], depth + 1)));
+                    Object.entries(children).forEach(([childName, childData]) => {
+                        childBox.appendChild(makeNode(childName, childData, depth + 1));
+                    });
                 }
                 // 折叠交互
                 if (hasKids) {
@@ -949,44 +1116,21 @@
                 console.log('treeBox children.length =', box.children.length);
                 return nodeDiv;
             }
-            // 从 root 开始画
-            const rootKids = hierarchy.root || [];
-            rootKids.forEach(n => box.appendChild(makeNode(n, hierarchy[n])));
-            // 绑定 checkbox 事件
-            // box.querySelectorAll('.module-checkbox').forEach(cb =>
-            //     cb.addEventListener('change', updateSelectedModules)
-            // );
-            // updateSelectedModules();   // 初始化已选数组
-        }
 
-        // Select all modules
-        function selectAllModules() {
-            document.querySelectorAll('.module-checkbox').forEach(checkbox => {
-                checkbox.checked = true;
+            Object.entries(hierarchy).forEach(([name, children]) => {
+                box.appendChild(makeNode(name, children));
             });
-            // updateSelectedModules();
         }
 
-        // Deselect all modules
-        function deselectAllModules() {
-            document.querySelectorAll('.module-checkbox').forEach(checkbox => {
-                checkbox.checked = false;
-            });
-            // updateSelectedModules();
-        }
+        function refreshModules() {
+            const moduleTree = document.getElementById('moduleTree');
+            moduleTree.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Refreshing modules...</div>';
 
-        // 更新加载状态
-        function updateLoadStatus(message, type = 'info') {
-            const statusElement = document.getElementById('loadStatus');
-            statusElement.textContent = message;
-            // 根据类型设置颜色
-            statusElement.className = '';
-            if (type === 'error') {
-                statusElement.classList.add('text-danger');
-            } else if (type === 'warning') {
-                statusElement.classList.add('text-warning');
+            // 重新生成模块树
+            if (moduleLevel1 || moduleLevel2 || moduleLevel3) {
+                buildModuleHierarchy();
             } else {
-                statusElement.classList.add('text-muted');
+                moduleTree.innerHTML = '<div class="text-center text-muted">Please configure module levels</div>';
             }
         }
 
@@ -1455,7 +1599,7 @@
          // --- MODIFIED: `updateDisplayFromCache` uses new limit-respecting functions ---
         function updateDisplayFromCache(options = {}) {
             const { reset = false } = options;
-            
+
             if (logCache.length === 0) {
                 clearLogTable();
                 displayMinId = null;
@@ -1528,7 +1672,6 @@
 
         // **REFACTORED**: Use the new cache mechanism
         function loadInitialData() {
-            fetchModuleHierarchy();
             updateStats();
             // Fetch latest logs. Start from 0, get `currentLimit` logs forward.
             fetchLogsToCache(null, currentLimit)
@@ -1537,6 +1680,15 @@
                     if (data.logs && data.logs.length) {
                         setTimeout(() => scrollToBottom(), 100);
                     }
+
+                    // 日志加载完成后刷新列选项
+                    refreshColumnOptions();
+
+                    // 尝试自动设置默认模块层级
+                    if (availableColumns.includes('module')) {
+                        document.getElementById('moduleLevel1').value = 'module';
+                    }
+
                     setupEventSource();
                 })
                 .catch(error => {
@@ -1585,6 +1737,33 @@
                 console.log("No more logs on server.");
             }
         }
+
+        // 在日志加载完成后刷新列选项
+        function loadInitialData() {
+            updateStats();
+            fetchLogsToCache(null, currentLimit)
+                .then(data => {
+                    updateDisplayFromCache({ reset: true });
+                    if (data.logs && data.logs.length) {
+                        setTimeout(() => scrollToBottom(), 100);
+                    }
+
+                    // 日志加载完成后刷新列选项
+                    refreshColumnOptions();
+
+                    // 尝试自动设置默认模块层级
+                    if (availableColumns.includes('module')) {
+                        document.getElementById('moduleLevel1').value = 'module';
+                    }
+
+                    setupEventSource();
+                })
+                .catch(error => {
+                    console.error('Initial log load failed, starting SSE without last_log_id', error);
+                    setupEventSource();
+                });
+        }
+
 
         // **REFACTORED**: Merge data into cache
         function setupEventSource() {
@@ -1690,25 +1869,6 @@
             selectedLevels = Array.from(document.querySelectorAll('.level-checkbox:checked'))
                 .map(checkbox => checkbox.value.toUpperCase());
             console.log('Selected levels:', selectedLevels);
-        }
-
-        // Fetch module hierarchy
-        function fetchModuleHierarchy() {
-            const treeBox = document.getElementById('moduleTree');
-            // ① 只替换 #moduleTree 内部，而不是把 parent 整个重写
-            treeBox.innerHTML = `
-                <div class="text-center text-muted p-2">
-                    <i class="fas fa-spinner fa-spin"></i> Loading modules...
-                </div>`;
-            fetch('/logger/api/modules')
-                .then(r => r.json())
-                .then(d => {
-                    moduleHierarchy = d.hierarchy;
-                    renderModuleTree(moduleHierarchy);  // 现在 treeBox 仍在，能正常渲染
-                })
-                .catch(e => {
-                    treeBox.innerHTML = `<div class="text-danger small p-2">Error loading modules</div>`;
-                });
         }
 
         // Update selected modules array
