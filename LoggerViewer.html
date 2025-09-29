@@ -1438,6 +1438,12 @@
             });
         }
 
+        // 返回“表格里还能再插多少行”
+        function getRemainingSlots() {
+            const currentRows = document.querySelectorAll('#logTableBody tr[data-log-id]').length;
+            return Math.max(0, MAX_LOG_LIMIT - currentRows);
+        }
+
          /**
          * 基于缓存更新显示列表。
          * @param {object} [options={}] - 更新选项
@@ -1471,6 +1477,25 @@
             // 否则，执行增量更新
             else {
                 // 在头部追加 (Prepend)
+                // if (newDisplayMinId < displayMinId) {
+                //     // 先拿所有“比当前最小 id 更旧”的日志，按 id 升序
+                //     let logsToPrepend = logCache.filter(log => log._id < displayMinId)
+                //                                 .sort((a, b) => a._id - b._id);
+
+                //     const slots = getRemainingSlots();
+                //     if (slots === 0) {
+                //         console.log('[prepend] 已达上限，不再插入');
+                //     } else {
+                //         // 只取“槽位”那么多的最“新”的旧日志（离当前最小 id 最近）
+                //         logsToPrepend = logsToPrepend.slice(-slots);
+                //         if (logsToPrepend.length > 0) {
+                //         const beforeHeight = document.getElementById('logTableBody').scrollHeight;
+                //         prependTableRows(logsToPrepend);   // 现在最多插 slots 条
+                //         const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                //         document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
+                //         }
+                //     }
+                // }
                 if (newDisplayMinId < displayMinId) {
                     const logsToPrepend = logCache.filter(log => log._id < displayMinId);
                     console.log("Render log table - Head ", logsToPrepend.length);
@@ -1482,7 +1507,24 @@
                         document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
                     }
                 }
+
                 // 在尾部追加 (Append)
+                // if (newDisplayMaxId > displayMaxId) {
+                //     // 先拿所有“比当前最大 id 更新”的日志，按 id 升序
+                //     let logsToAppend = logCache.filter(log => log._id > displayMaxId)
+                //                                 .sort((a, b) => a._id - b._id);
+
+                //     const slots = getRemainingSlots();
+                //     if (slots === 0) {
+                //         console.log('[append] 已达上限，不再插入');
+                //     } else {
+                //         // 只取“槽位”那么多的最“旧”的新日志（离当前最大 id 最近）
+                //         logsToAppend = logsToAppend.slice(0, slots);
+                //         const wasNearBottom = isNearBottom;
+                //         logsToAppend.forEach(addLogRow);     // addLogRow 内部仍会做“删头”保护，但这里已经不会超过 slots
+                //         if (autoScrollEnabled && wasNearBottom) scrollToBottom();
+                //     }
+                // }
                 if (newDisplayMaxId > displayMaxId) {
                     const logsToAppend = logCache.filter(log => log._id > displayMaxId);
                     console.log("Render log table - Tail ", logsToAppend.length);
@@ -1515,33 +1557,6 @@
             totalEntries = allLogRows.length;
             document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
             document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
-        }
-
-        // **REFACTORED**: Use the new cache mechanism
-        function loadInitialData() {
-            updateStats();
-            // Fetch latest logs. Start from 0, get `currentLimit` logs forward.
-            fetchLogsToCache(null, currentLimit)
-                .then(data => {
-                    updateDisplayFromCache({ reset: true });
-                    if (data.logs && data.logs.length) {
-                        setTimeout(() => scrollToBottom(), 100);
-                    }
-
-                    // 日志加载完成后刷新列选项
-                    refreshColumnOptions();
-
-                    // 尝试自动设置默认模块层级
-                    if (availableColumns.includes('module')) {
-                        document.getElementById('moduleLevel1').value = 'module';
-                    }
-
-                    setupEventSource();
-                })
-                .catch(error => {
-                    console.error('Initial log load failed, starting SSE without last_log_id', error);
-                    setupEventSource();
-                });
         }
 
         // **重写后的、更优化的代码**
@@ -1611,7 +1626,6 @@
                 });
         }
 
-
         // **REFACTORED**: Merge data into cache
         function setupEventSource() {
             if (eventSource) eventSource.close();
@@ -1654,9 +1668,9 @@
         // ----------------------------------------- Filter Related -----------------------------------------
 
         // 模块层级配置
-        let moduleLevel1 = '';
-        let moduleLevel2 = '';
-        let moduleLevel3 = '';
+        let moduleLevel1 = 'module';
+        let moduleLevel2 = 'name';
+        let moduleLevel3 = 'funcName';
 
         let selectedLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
         let selectedModules = [];
@@ -1702,6 +1716,10 @@
                 if (column === currentLevel3) option3.selected = true;
                 level3Select.appendChild(option3);
             });
+
+            document.getElementById('moduleLevel1').value = moduleLevel1;
+            document.getElementById('moduleLevel2').value = moduleLevel2;
+            document.getElementById('moduleLevel3').value = moduleLevel3;
         }
 
         // 生成模块树
@@ -1786,7 +1804,7 @@
 
         function initModuleSystem() {
             // 生成模块层次结构
-            buildModuleHierarchy();
+            // buildModuleHierarchy();
 
             // 初始选择所有根节点
             selectedModules = Object.keys(moduleHierarchy);
