@@ -132,14 +132,6 @@
             margin-right: 5px;
         }
 
-        .tree-badge {
-            margin-left: auto;
-            background-color: #e9ecef;
-            border-radius: 10px;
-            padding: 0 6px;
-            font-size: 0.8em;
-        }
-
         /* 1. 让“模块”这张 card 占满侧边栏剩余空间 */
         .card.module-panel {              /* 给 Module Panel 的 card 加这个类 */
             flex: 1 1 0;                   /* 关键：占满剩余高度 */
@@ -1824,7 +1816,6 @@
                     <input type="checkbox" class="tree-checkbox" id="mod-${fullPath}"
                            data-path="${fullPath}" ${selectedModules.includes(fullPath) ? 'checked' : ''}>
                     <label for="mod-${fullPath}" class="flex-grow-1">${name}</label>
-                    <span class="tree-badge">${countModuleLogs(fullPath)}</span>
                 `;
 
                 const childrenDiv = document.createElement('div');
@@ -1848,21 +1839,6 @@
                     childrenDiv.classList.add('expanded');
                 }
 
-                const checkbox = labelDiv.querySelector('.tree-checkbox');
-                checkbox.addEventListener('change', (e) => {
-                    const isChecked = e.target.checked;
-                    const modulePath = e.target.dataset.path;
-
-                    // 只更新当前节点
-                    if (isChecked) {
-                        if (!selectedModules.includes(modulePath)) {
-                            selectedModules.push(modulePath);
-                        }
-                    } else {
-                        selectedModules = selectedModules.filter(m => m !== modulePath);
-                    }
-                });
-
                 nodeDiv.appendChild(labelDiv);
                 nodeDiv.appendChild(childrenDiv);
                 return nodeDiv;
@@ -1874,44 +1850,57 @@
             });
         }
 
-        // 计算模块日志数量（根据节点类型使用不同匹配方式）
-        function countModuleLogs(modulePath) {
-            const hasChildren = nodeHasChildrenMap.get(modulePath);
+        /**
+         * 按照「上层勾选就覆盖子树，叶子勾选必须完整路径」的规则
+         * 重新计算 selectedModules
+         */
+        function rebuildSelectedModules() {
+            // 1. 收集所有被勾选的节点
+            const checked = Array.from(document.querySelectorAll('.tree-checkbox:checked'))
+                                .map(cb => cb.dataset.path);
 
-            if (hasChildren) {
-                // 非叶子节点：匹配当前路径及其所有子路径
-                return logCache.filter(log =>
-                    log.module && (log.module === modulePath || log.module.startsWith(modulePath + '.'))
-                ).length;
-            } else {
-                // 叶子节点：精确匹配
-                return logCache.filter(log => log.module === modulePath).length;
+            // 2. 去掉「被祖先节点覆盖」的冗余节点
+            const minimal = [];
+            checked.sort();   // 保证短路径在前
+            for (const path of checked) {
+                // 如果已经有一个祖先被选中，则跳过
+                const hasAncestor = minimal.some(m => path.startsWith(m + '.'));
+                if (!hasAncestor) {
+                    minimal.push(path);
+                }
             }
+
+            // 3. 把「非叶子」节点后面加 .*，叶子保持原样
+            selectedModules = minimal.map(p => {
+                return nodeHasChildrenMap.get(p) ? p + '.*' : p;
+            });
         }
 
         function isLogVisible(log) {
             if (!log) return false;
 
-            // 检查日志级别
-            const levelMatch = selectedLevels.includes(log.levelname);
-            if (!levelMatch) return false;
+            // 1. 级别过滤
+            if (!selectedLevels.includes(log.levelname)) return false;
 
-            // 检查模块
+            // 2. 模块过滤
             if (selectedModules.length === 0) return true;
 
-            // 根据过滤规则检查模块
-            return selectedModules.some(modulePath => {
-                const hasChildren = nodeHasChildrenMap.get(modulePath);
+            // 3. 拼出日志的完整 module 字符串
+            const segs = [];
+            if (moduleLevel1 && log[moduleLevel1]) segs.push(log[moduleLevel1]);
+            if (moduleLevel2 && log[moduleLevel2]) segs.push(log[moduleLevel2]);
+            if (moduleLevel3 && log[moduleLevel3]) segs.push(log[moduleLevel3]);
+            const moduleStr = segs.join('.');
 
-                if (hasChildren) {
-                    // 非叶子节点：使用 "modulePath.*" 模式
-                    return log.module && (
-                        log.module === modulePath ||
-                        log.module.startsWith(modulePath + '.')
-                    );
+            // 4. 任一规则满足即可
+            return selectedModules.some(rule => {
+                if (rule.endsWith('.*')) {
+                    // 非叶子规则：前缀匹配
+                    const prefix = rule.slice(0, -2);
+                    return moduleStr === prefix || moduleStr.startsWith(prefix + '.');
                 } else {
-                    // 叶子节点：精确匹配
-                    return log.module === modulePath;
+                    // 叶子规则：完整匹配
+                    return moduleStr === rule;
                 }
             });
         }
@@ -1956,7 +1945,7 @@
         function applyFilters() {
             // 1. Update filter state from UI (no visual change yet)
             updateSelectedLevels();
-            updateSelectedModules();
+            rebuildSelectedModules();
             updateFilterStatus();
 
             // 2. Apply the new filters to the existing DOM
@@ -1977,13 +1966,6 @@
             selectedLevels = Array.from(document.querySelectorAll('.level-checkbox:checked'))
                 .map(checkbox => checkbox.value.toUpperCase());
             console.log('Selected levels:', selectedLevels);
-        }
-
-        // Update selected modules array
-        function updateSelectedModules() {
-            selectedModules = Array.from(document.querySelectorAll('.module-checkbox:checked'))
-                .map(checkbox => checkbox.value);
-            console.log('Selected modules:', selectedModules);
         }
 
         // Update filter status display
