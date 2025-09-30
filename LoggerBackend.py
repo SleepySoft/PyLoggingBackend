@@ -143,6 +143,7 @@ class LoggerBackend:
             else:
                 newest_id = self.log_wrapper.get_newest_log_id()
                 start_log_id = newest_id - limit
+            start_log_id = max(0, start_log_id)
 
             filter_func = lambda entry: (
                     (not level_filter or entry.get('levelname', 'UNKNOWN') in level_filter) and
