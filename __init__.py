@@ -2,6 +2,9 @@ import sys
 import logging
 from pythonjsonlogger import jsonlogger
 
+from .LoggerBackend import LoggerBackend
+from .LogFileWrapper import LogFileWrapper
+
 
 # Configure root logger with JSON formatting
 def setup_logging(log_file='application.log'):

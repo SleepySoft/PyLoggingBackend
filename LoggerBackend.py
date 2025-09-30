@@ -5,10 +5,15 @@ import argparse
 import traceback
 import threading
 from collections import defaultdict
-from flask import Flask, request, jsonify, Response, session, send_file
+from flask import Flask, request, jsonify, Response, send_file
 from flask_cors import CORS
 
-from LogFileWrapper import LogFileWrapper  # Import the updated LogFileWrapper class
+if __name__ == '__main__':
+    from LogFileWrapper import LogFileWrapper
+else:
+    from .LogFileWrapper import LogFileWrapper
+
+self_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class LoggerBackend:
@@ -67,28 +72,30 @@ class LoggerBackend:
             time.sleep(1)
             print(f"Flask server running in background on http://{host}:{port}")
 
-    def register_router(self, app: Flask) -> bool:
+    def register_router(self, app: Flask, wrapper=None) -> bool:
         if not self.app:
             self.app = app
             self.app.secret_key = os.urandom(24)  # Secret key for session management
             CORS(self.app)
-            self._register_routes()
+            self._register_routes(wrapper)
             return True
         else:
             # Already registered
             return False
 
-    def _register_routes(self):
-        self.app.add_url_rule('/logger/log_viewer', 'log_viewer', self.log_viewer)
-        self.app.add_url_rule('/logger/api/logs', 'get_logs', self.get_logs, methods=['GET'])
-        self.app.add_url_rule('/logger/api/modules', 'get_module_hierarchy', self.get_module_hierarchy, methods=['GET'])
-        self.app.add_url_rule('/logger/api/stats', 'get_log_stats', self.get_log_stats, methods=['GET'])
-        self.app.add_url_rule('/logger/api/stream', 'stream_logs', self.stream_logs)
+    def _register_routes(self, wrapper):
+        def maybe_wrap(fn):
+            return wrapper(fn) if wrapper else fn
+        self.app.add_url_rule('/logger/log_viewer', 'log_viewer', maybe_wrap(self.log_viewer))
+        self.app.add_url_rule('/logger/api/logs', 'get_logs', maybe_wrap(self.get_logs), methods=['GET'])
+        self.app.add_url_rule('/logger/api/modules', 'get_module_hierarchy', maybe_wrap(self.get_module_hierarchy), methods=['GET'])
+        self.app.add_url_rule('/logger/api/stats', 'get_log_stats', maybe_wrap(self.get_log_stats), methods=['GET'])
+        self.app.add_url_rule('/logger/api/stream', 'stream_logs', maybe_wrap(self.stream_logs))
 
     # ------------------------------------------ Web Service ------------------------------------------
 
     def log_viewer(self):
-        return send_file('LoggerViewer.html')
+        return send_file(os.path.join(self_path, 'LoggerViewer.html'))
 
     def get_module_hierarchy(self):
         with self.cache_lock:
