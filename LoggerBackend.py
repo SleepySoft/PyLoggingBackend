@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import argparse
 import traceback
 import threading
 from collections import defaultdict
@@ -201,20 +202,47 @@ class LoggerBackend:
 # ----------------------------------------------------------------------------------------------------------------------
 
 def main():
-    # Standalone service
-    backend = LoggerBackend(
-        monitoring_file_path="application.log",
-        cache_limit_count=10000
-    )
-    backend.start_service(blocking=True)
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(description='Logger Backend Service')
 
-    # Integration with existing Flask app
+    parser.add_argument('-m', '--monitoring_file_path',
+                        type=str,
+                        default='application.log',
+                        help='Path to the monitoring log file (default: application.log)')
+
+    parser.add_argument('-c', '--cache_limit_count',
+                        type=int,
+                        default=10000,
+                        help='Maximum cache limit count (default: 10000)')
+
+    parser.add_argument('-p', '--port',
+                        type=int,
+                        default=5000,
+                        help='Port number for the service (default: 5000)')
+
+    parser.add_argument('-v', '--verbose',
+                        action='store_true',
+                        help='Enable verbose output')
+
+    args = parser.parse_args()
+
+    # Standalone service with command line arguments
+    backend = LoggerBackend(
+        monitoring_file_path=args.monitoring_file_path,
+        cache_limit_count=args.cache_limit_count
+    )
+
+    if args.verbose:
+        print(
+            f"Starting service on port {args.port} with log file: {args.monitoring_file_path}, cache limit: {args.cache_limit_count}")
+
+    backend.start_service(port=args.port, blocking=True)
+
+    # Example: Integration with existing Flask app
     # app = Flask(__name__)
     # backend = LoggerBackend(
-    #     monitoring_file_path="app.log",
-    #     cache_limit_by=LoggerBackend.LIMIT_BY_SIZE,
-    #     cache_limit_count=10485760,  # 10MB
-    #     start_service=False
+    #     monitoring_file_path="application.log",
+    #     cache_limit_count=10000
     # )
     # backend.register_router(app)
 

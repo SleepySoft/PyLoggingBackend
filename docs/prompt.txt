@@ -206,8 +206,27 @@ A
 
 
 
+根据以下代码为我增加两个命令行参数，分别用来对应monitoring_file_path和cache_limit_count，默认值保持一致。
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def main():
+    # Standalone service
+    backend = LoggerBackend(
+        monitoring_file_path="application.log",
+        cache_limit_count=10000
+    )
+    backend.start_service(blocking=True)
 
 
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as e:
+        print(str(e))
+        print(traceback.format_exc())
+    finally:
+        pass
 
 
 
