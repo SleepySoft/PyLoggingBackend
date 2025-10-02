@@ -217,6 +217,11 @@
             color: #6c757d;
             font-weight: bold;
             margin-right: 8px;
+            white-space: nowrap;
+        }
+
+        .log-table .timestamp-cell {
+            white-space: nowrap; /* 强制不换行 */
         }
 
         .module {
@@ -253,15 +258,6 @@
             height: 1px;
             width: 100%;
             visibility: hidden;
-        }
-
-        .log-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem 1rem;
-            background-color: #f8f9fa;
-            border-top: 1px solid #dee2e6;
         }
 
         .stats-item {
@@ -429,36 +425,6 @@
         .collapsed-status .status-indicator .dot {
             width: 6px;
             height: 6px;
-        }
-
-        /* 模块树样式 */
-        .module-item {
-            padding: 4px 0;
-        }
-
-        .module-label {
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-        }
-
-        .module-label:hover {
-            background-color: #f0f0f0;
-        }
-
-        .module-children {
-            margin-left: 20px;
-        }
-
-        .module-toggle {
-            margin-right: 5px;
-            cursor: pointer;
-            width: 16px;
-            text-align: center;
-        }
-
-        .module-checkbox {
-            margin-right: 5px;
         }
 
         /* 表头编辑器样式 */
@@ -831,6 +797,7 @@
         let moduleHierarchy = {}; // Store module hierarchy data
         let lastScrollTop = 0;      // 上一次滚动条位置
         let isScrollingUp = false;  // 方向
+        let logTableBody = null
 
         const MAX_LOG_LIMIT = 5000; // Maximum number of logs to keep in cache and display
 
@@ -841,6 +808,7 @@
 
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
+            logTableBody = document.getElementById('logTableBody')      // Optimize: Cacha DOM element
             initializeEventListeners();
             loadInitialData();
             ensureScrollObserver();
@@ -860,10 +828,11 @@
 
         // Initialize event listeners
         function initializeEventListeners() {
-            var applyButton = document.querySelector('button[onclick="applyFilters()"]');
-            if (applyButton) {
-                applyButton.addEventListener('click', applyFilters);
-            }
+            // var applyButton = document.querySelector('button[onclick="applyFilters()"]');
+            // if (applyButton) {
+            //    applyButton.addEventListener('click', applyFilters);
+            //}
+
             // 自动滚动按钮监听
             document.getElementById('autoScrollBtn').addEventListener('click', toggleAutoScroll);
             // 滚动到底部按钮监听
@@ -907,7 +876,7 @@
             observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     // --- ADDED: Check if the display limit has been reached. ---
-                    const displayedCount = document.getElementById('logTableBody').querySelectorAll('tr[data-log-id]').length;
+                    const displayedCount = logTableBody.querySelectorAll('tr[data-log-id]').length;
                     if (displayedCount >= MAX_LOG_LIMIT) {
                         console.log("Display limit reached, upward scroll is disabled.");
                         return; // Do not trigger load more if the display is full.
@@ -1233,14 +1202,14 @@
         }
 
         function renderTableBody(logs) {
-            const tbody = document.getElementById('logTableBody');
+            const tbody = logTableBody;
             tbody.innerHTML = '';
             logs.forEach(log => addLogRow(log));
             ensureScrollObserver();
         }
 
         function prependTableRows(logs) {
-            const tbody = document.getElementById('logTableBody');
+            const tbody = logTableBody;
             logs
                 .reverse()                  // 先插最旧的，顺序才不会颠倒
                 .forEach(log => {
@@ -1266,6 +1235,7 @@
                 if (column === 'levelname') {
                     td.innerHTML = `<span class="level-badge badge-${log.levelname}">${log.levelname}</span>`;
                 } else if (column === 'asctime') {
+                    td.classList.add('timestamp-cell');
                     td.innerHTML = `<span class="timestamp">${log.asctime}</span>`;
                 } else if (column === 'module' && log.module) {
                     td.innerHTML = `<span class="module" title="${log.module}">${log.module}</span>`;
@@ -1279,7 +1249,7 @@
 
         // --- MODIFIED: `addLogRow` now enforces the display limit ---
         function addLogRow(log) {
-            const tbody = document.getElementById('logTableBody');
+            const tbody = logTableBody;
 
             // Enforce display limit by removing the oldest log from the top
             while (tbody.querySelectorAll('tr[data-log-id]').length >= MAX_LOG_LIMIT) {
@@ -1292,7 +1262,7 @@
         }
 
         function clearLogTable() {
-            const tbody = document.getElementById('logTableBody');
+            const tbody = logTableBody;
             if (tbody) {
                 tbody.innerHTML = '';
             }
@@ -1314,7 +1284,7 @@
                 obsEl.style.height = '1px';
             }
             // 重新插到 tbody 最前面
-            const tbody = document.getElementById('logTableBody');
+            const tbody = logTableBody;
             if (tbody.firstChild) {
                 tbody.insertBefore(obsEl, tbody.firstChild);
             } else {
@@ -1477,54 +1447,19 @@
             // 否则，执行增量更新
             else {
                 // 在头部追加 (Prepend)
-                // if (newDisplayMinId < displayMinId) {
-                //     // 先拿所有“比当前最小 id 更旧”的日志，按 id 升序
-                //     let logsToPrepend = logCache.filter(log => log._id < displayMinId)
-                //                                 .sort((a, b) => a._id - b._id);
-
-                //     const slots = getRemainingSlots();
-                //     if (slots === 0) {
-                //         console.log('[prepend] 已达上限，不再插入');
-                //     } else {
-                //         // 只取“槽位”那么多的最“新”的旧日志（离当前最小 id 最近）
-                //         logsToPrepend = logsToPrepend.slice(-slots);
-                //         if (logsToPrepend.length > 0) {
-                //         const beforeHeight = document.getElementById('logTableBody').scrollHeight;
-                //         prependTableRows(logsToPrepend);   // 现在最多插 slots 条
-                //         const afterHeight = document.getElementById('logTableBody').scrollHeight;
-                //         document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
-                //         }
-                //     }
-                // }
                 if (newDisplayMinId < displayMinId) {
                     const logsToPrepend = logCache.filter(log => log._id < displayMinId);
                     console.log("Render log table - Head ", logsToPrepend.length);
 
                     if (logsToPrepend.length > 0) {
-                        const beforeHeight = document.getElementById('logTableBody').scrollHeight;
+                        const beforeHeight = logTableBody.scrollHeight;
                         prependTableRows(logsToPrepend);
-                        const afterHeight = document.getElementById('logTableBody').scrollHeight;
+                        const afterHeight = logTableBody.scrollHeight;
                         document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
                     }
                 }
 
                 // 在尾部追加 (Append)
-                // if (newDisplayMaxId > displayMaxId) {
-                //     // 先拿所有“比当前最大 id 更新”的日志，按 id 升序
-                //     let logsToAppend = logCache.filter(log => log._id > displayMaxId)
-                //                                 .sort((a, b) => a._id - b._id);
-
-                //     const slots = getRemainingSlots();
-                //     if (slots === 0) {
-                //         console.log('[append] 已达上限，不再插入');
-                //     } else {
-                //         // 只取“槽位”那么多的最“旧”的新日志（离当前最大 id 最近）
-                //         logsToAppend = logsToAppend.slice(0, slots);
-                //         const wasNearBottom = isNearBottom;
-                //         logsToAppend.forEach(addLogRow);     // addLogRow 内部仍会做“删头”保护，但这里已经不会超过 slots
-                //         if (autoScrollEnabled && wasNearBottom) scrollToBottom();
-                //     }
-                // }
                 if (newDisplayMaxId > displayMaxId) {
                     const logsToAppend = logCache.filter(log => log._id > displayMaxId);
                     console.log("Render log table - Tail ", logsToAppend.length);
@@ -1541,7 +1476,7 @@
 
             // 5. [更新状态和统计]
 
-            const allLogRows = document.getElementById('logTableBody').querySelectorAll('tr[data-log-id]');
+            const allLogRows = logTableBody.querySelectorAll('tr[data-log-id]');
             if (allLogRows.length > 0) {
                 displayMinId = parseInt(allLogRows[0].dataset.logId, 10);
                 displayMaxId = parseInt(allLogRows[allLogRows.length - 1].dataset.logId, 10);
@@ -1563,8 +1498,6 @@
         function loadMoreLogs() {
             if (isLoading) return; // 只需要一个加载守卫
 
-            // const beforeHeight = document.getElementById('logTableBody').scrollHeight;
-
             // 1. 检查是否可以从缓存加载
             const oldestDisplayedLogIndex = logCache.findIndex(log => log._id === displayMinId);
             if (oldestDisplayedLogIndex > 0) {
@@ -1572,11 +1505,7 @@
                 // 从缓存中取出更早的日志来显示（这里只是一个简化的例子，实际应由 updateDisplayFromCache 处理）
                 // 简单地触发一次显示更新即可
                 updateDisplayFromCache();
-
-                // // 恢复滚动位置
-                // const afterHeight = document.getElementById('logTableBody').scrollHeight;
-                // document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
-                // return; // 从缓存加载完成，结束
+                return; // 从缓存加载完成，结束
             }
 
             // 2. 如果缓存到顶，且服务器还有，则从网络加载
@@ -1591,9 +1520,6 @@
                 fetchLogsToCache(startId, -currentLimit)
                     .then(() => {
                         updateDisplayFromCache();
-                        // 恢复滚动位置
-                        // const afterHeight = document.getElementById('logTableBody').scrollHeight;
-                        // document.querySelector('.log-entries-container').scrollTop += (afterHeight - beforeHeight);
                     });
             } else {
                 console.log("No more logs on server.");
@@ -1941,7 +1867,7 @@
          * NEW: Iterates through the DOM to apply filters by hiding/showing rows.
          */
         function applyFiltersToDOM() {
-            const rows = document.getElementById('logTableBody').querySelectorAll('tr[data-log-id]');
+            const rows = logTableBody.querySelectorAll('tr[data-log-id]');
             let visibleCount = 0;
             rows.forEach(row => {
                 const logId = parseInt(row.dataset.logId, 10);
@@ -1955,7 +1881,7 @@
             });
             
             // Update the displayed entry count
-            totalEntries = visibleCount;
+            // totalEntries = visibleCount;
             document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
             document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
         }
