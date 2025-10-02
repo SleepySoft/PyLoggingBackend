@@ -44,7 +44,7 @@ class LoggerBackend:
         self.app = Flask(__name__)
         self.app.secret_key = os.urandom(24)  # Secret key for session management
         CORS(self.app)
-        self._register_routes()
+        self._register_routes(wrapper=None)
 
         if blocking:
             # Run in foreground (blocking)

@@ -11,6 +11,12 @@ import threading
 from datetime import datetime
 
 
+if __name__ == '__main__':
+    from LogUtility import setup_logging
+else:
+    from .LogUtility import setup_logging
+
+
 class LogGenerator:
     """Base class for log generators"""
 
@@ -295,7 +301,7 @@ def run_all_tests(duration_minutes=5):
 
     # Run for specified duration
     try:
-        time.sleep(duration_minutes * 60000)
+        time.sleep(duration_minutes * 60)
     except KeyboardInterrupt:
         logger.info("Test interrupted by user")
     finally:
@@ -318,7 +324,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--duration',
         type=int,
-        default=5,
+        default=10000,
         help='Duration to run tests in minutes (default: 5)'
     )
     parser.add_argument(
@@ -336,8 +342,6 @@ if __name__ == "__main__":
     print("-" * 50)
 
     # Set up logging
-
-    from __init__ import setup_logging
     setup_logging(args.log_file)
 
     # Run the tests
