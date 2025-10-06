@@ -65,3 +65,26 @@ def backup_and_clean_previous_log_file(
 def limit_logger_level(logger_name: str, level = logging.WARNING):
     _logger = logging.getLogger(logger_name)
     _logger.setLevel(level)
+
+
+def inspect_logger(logger_name: str):
+    """检查并打印一个 logger 的详细状态"""
+    logger = logging.getLogger(logger_name)
+
+    print(f"\n--- Inspecting logger: '{logger.name}' ---")
+    print(f"Effective Level: {logging.getLevelName(logger.getEffectiveLevel())}")
+    print(f"Propagate: {logger.propagate}")
+    print(f"Handlers: {logger.handlers}")
+
+    if not logger.handlers:
+        print("Logger has no direct handlers.")
+    else:
+        for i, handler in enumerate(logger.handlers):
+            print(f"  - Handler {i}: {handler.__class__.__name__}")
+            print(f"    - Level: {logging.getLevelName(handler.level)}")
+            print(f"    - Formatter: {handler.formatter}")
+
+    if logger.parent:
+        print(f"Parent logger: '{logger.parent.name}'")
+    else:
+        print("This is the root logger or a logger with no parent.")
