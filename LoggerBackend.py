@@ -5,7 +5,7 @@ import argparse
 import traceback
 import threading
 from collections import defaultdict
-from flask import Flask, request, jsonify, Response, send_file
+from flask import Flask, request, jsonify, Response, send_file, send_from_directory, abort
 from flask_cors import CORS
 
 if __name__ == '__main__':
@@ -17,7 +17,7 @@ self_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class LoggerBackend:
-    def __init__(self, monitoring_file_path: str, cache_limit_count: int):
+    def __init__(self, monitoring_file_path: str, cache_limit_count: int, link_file_roots: dict = None):
         self.log_file = monitoring_file_path
         self.cache_limit_count = cache_limit_count
         self.last_validation_time = time.time()
@@ -30,6 +30,14 @@ class LoggerBackend:
 
         # Track last processed ID for background processing
         self.last_processed_id = -1
+
+        # Process and store the safe, absolute paths for the link file directories
+        self.link_file_roots = {}
+        if link_file_roots:
+            for alias, path in link_file_roots.items():
+                # Storing the absolute path is crucial for security checks
+                self.link_file_roots[alias] = os.path.abspath(path)
+                print(f"Registered link file alias '{alias}' -> '{self.link_file_roots[alias]}'")
 
     def start_service(self, host: str = '0.0.0.0', port: int = 5000, blocking: bool = False):
         """
@@ -86,11 +94,22 @@ class LoggerBackend:
     def _register_routes(self, wrapper):
         def maybe_wrap(fn):
             return wrapper(fn) if wrapper else fn
+
         self.app.add_url_rule('/logger/log_viewer', 'log_viewer', maybe_wrap(self.log_viewer))
         self.app.add_url_rule('/logger/api/logs', 'get_logs', maybe_wrap(self.get_logs), methods=['GET'])
-        self.app.add_url_rule('/logger/api/modules', 'get_module_hierarchy', maybe_wrap(self.get_module_hierarchy), methods=['GET'])
+        self.app.add_url_rule('/logger/api/modules', 'get_module_hierarchy', maybe_wrap(self.get_module_hierarchy),
+                              methods=['GET'])
         self.app.add_url_rule('/logger/api/stats', 'get_log_stats', maybe_wrap(self.get_log_stats), methods=['GET'])
         self.app.add_url_rule('/logger/api/stream', 'stream_logs', maybe_wrap(self.stream_logs))
+
+        # Register the new route for serving linked files.
+        # The <path:filepath> converter allows slashes in the filepath variable.
+        self.app.add_url_rule(
+            '/logger/link_file/<path:filepath>',
+            'serve_link_file',
+            maybe_wrap(self.serve_link_file),
+            methods=['GET']
+        )
 
     # ------------------------------------------ Web Service ------------------------------------------
 
@@ -172,7 +191,7 @@ class LoggerBackend:
         """Server-sent events with _id based updates"""
         # Get last_id from query parameter or session
         limit = int(request.args.get('limit', 100))
-        last_log_id_arg  = request.args.get('last_log_id')
+        last_log_id_arg = request.args.get('last_log_id')
 
         last_log_id = int(last_log_id_arg) if last_log_id_arg is not None else None
 
@@ -205,6 +224,41 @@ class LoggerBackend:
                 time.sleep(0.5)
 
         return Response(event_stream(), mimetype='text/event-stream')
+
+    def serve_link_file(self, filepath: str):
+        """
+        Securely serves a file from one of the configured link_file_roots.
+
+        This function prevents directory traversal attacks by checking if the requested
+        path is within a registered safe directory.
+
+        Args:
+            filepath (str): The path provided in the URL, e.g., "appendix_a/file1.bin".
+
+        Returns:
+            A file response or a 404 error if the file is not found or not allowed.
+        """
+        # The filepath must contain a slash to separate the alias from the subpath.
+        if '/' not in filepath:
+            abort(404)
+
+        # Split the path into the alias (e.g., "appendix_a") and the subpath (e.g., "file1.bin").
+        alias, subpath = filepath.split('/', 1)
+
+        # Look up the registered root directory for the given alias.
+        root_directory = self.link_file_roots.get(alias)
+
+        # If the alias is not configured, it's a "Not Found" error.
+        if not root_directory:
+            abort(404)
+
+        try:
+            # Use Flask's send_from_directory, which is the safest way to send files.
+            # It automatically handles security checks to prevent access to files
+            # outside of the specified `root_directory`.
+            return send_from_directory(root_directory, subpath, as_attachment=True)
+        except FileNotFoundError:
+            abort(404)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

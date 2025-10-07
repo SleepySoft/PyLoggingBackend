@@ -1240,7 +1240,30 @@
                 } else if (column === 'module' && log.module) {
                     td.innerHTML = `<span class="module" title="${log.module}">${log.module}</span>`;
                 } else {
-                    td.textContent = log[column] || '';
+                    // 1. Safely add the main log message as a text node to prevent XSS attacks.
+                    td.appendChild(document.createTextNode(log[column] || ''));
+
+                    // 2. If this is the 'message' column and a link_file exists, append a link icon.
+                    if (column === 'message' && log.link_file) {
+                        // Add a space for visual separation.
+                        td.appendChild(document.createTextNode(' '));
+
+                        // Create the anchor (<a>) element.
+                        const link = document.createElement('a');
+                        link.href = `/logger/link_file/${log.link_file}`; // Assumes this is your backend endpoint.
+                        link.target = '_blank'; // Open the link in a new tab.
+                        link.title = `View file: ${log.link_file}`; // Show the path on hover.
+                        link.style.marginLeft = '8px'; // Add a little space before the icon.
+                        link.style.textDecoration = 'none'; // Optional: remove underline.
+
+                        // Use a Font Awesome icon for a clean look.
+                        const icon = document.createElement('i');
+                        icon.className = 'fas fa-link text-primary'; // 'text-primary' gives it a nice color.
+                        link.appendChild(icon);
+
+                        // Add the completed link to the table cell.
+                        td.appendChild(link);
+                    }
                 }
                 tr.appendChild(td);
             });

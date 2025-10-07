@@ -17,7 +17,7 @@ def setup_logging(log_file='application.log'):
 
     # JSON formatter with structured data
     formatter = jsonlogger.JsonFormatter(
-        '%(asctime)s %(name)s %(levelname)s %(module)s %(funcName)s %(message)s',
+        '%(asctime)s %(name)s %(levelname)s %(module)s %(funcName)s %(message)s %(link_file)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
