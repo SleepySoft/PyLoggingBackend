@@ -241,6 +241,141 @@
             font-size: 0.9em;
         }
 
+        /* Tree view styles */
+        .tree-node {
+            display: flex;
+            align-items: center;
+        }
+
+        .tree-indent {
+            width: 20px;
+            display: inline-block;
+        }
+
+        .tree-toggle {
+            cursor: pointer;
+            width: 20px;
+            text-align: center;
+            margin-right: 5px;
+        }
+
+        .tree-children {
+            padding-left: 25px;
+        }
+
+        .collapsed .tree-children {
+            display: none;
+        }
+
+        .table-section {
+            margin-bottom: 20px;
+        }
+
+        .table-header {
+            background: #4a6572;
+            color: white;
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 5px 5px 0 0;
+        }
+
+        .table-header h2 {
+            font-size: 1.2em;
+            margin: 0;
+        }
+
+        .batch-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .batch-control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .batch-control-label {
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .tri-state-checkbox {
+            position: relative;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .tri-state-checkbox input {
+            opacity: 0;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .tri-state-checkbox .state-indicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 2px solid #3498db;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .tri-state-checkbox .state-indicator::after {
+            content: '';
+            position: absolute;
+            display: none;
+        }
+
+        .tri-state-checkbox.checked .state-indicator::after {
+            display: block;
+            left: 6px;
+            top: 2px;
+            width: 5px;
+            height: 10px;
+            border: solid #3498db;
+            border-width: 0 3px 3px 0;
+            transform: rotate(45deg);
+        }
+
+        .tri-state-checkbox.indeterminate .state-indicator::after {
+            display: block;
+            left: 4px;
+            top: 8px;
+            width: 8px;
+            height: 3px;
+            background: #3498db;
+        }
+
+        .parent-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 10px;
+        }
+
+        .parent-control-btn {
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .parent-control-btn:hover {
+            background: #e0e0e0;
+        }
+
         @media (max-width: 768px) {
             .container {
                 margin: 10px;
@@ -269,6 +404,64 @@
                 min-width: 60px;
                 padding: 3px 8px;
             }
+
+            .batch-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+
+        .parent-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 10px;
+            vertical-align: middle; /* 确保与文本垂直居中 */
+        }
+
+        .parent-control-btn {
+            background: #3498db; /* 主色调 */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            line-height: 1;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .parent-control-btn:hover {
+            background: #2980b9;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .parent-control-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .apply-to-children-btn {
+            background: transparent;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 6px;
+            margin-left: 8px;
+            transition: all 0.2s ease;
+            opacity: 0.7; /* 默认半透明，鼠标悬停时完全显示 */
+        }
+
+        .apply-to-children-btn:hover {
+            opacity: 1;
+            background: #3498db;
+            border-color: #3498db;
+            color: white;
+            transform: scale(1.1);
         }
     </style>
 </head>
@@ -297,31 +490,148 @@
         </div>
 
         <div id="loggersContainer" style="display: none;">
-            <table class="loggers-table">
-                <thead>
-                    <tr>
-                        <th width="200">Logger Name</th>
-                        <th width="120">Enabled</th>
-                        <th width="150">Current Level</th>
-                        <th>Set Level</th>
-                        <th width="100">Handlers</th>
-                    </tr>
-                </thead>
-                <tbody id="loggersTableBody">
-                    <!-- Dynamically populated -->
-                </tbody>
-            </table>
+            <!-- Third-party loggers section -->
+            <div class="table-section">
+                <div class="table-header" onclick="toggleSection('thirdParty')">
+                    <h2>Third-Party Loggers <span id="thirdPartyToggle">▼</span></h2>
+                    <div class="batch-controls" onclick="event.stopPropagation()">
+                        <div class="batch-control-group">
+                            <span class="batch-control-label">Enable All:</span>
+                            <div class="tri-state-checkbox" id="thirdPartyEnableAll" onclick="toggleTriState(this)">
+                                <input type="checkbox">
+                                <div class="state-indicator"></div>
+                            </div>
+                        </div>
+                        <div class="batch-control-group">
+                            <span class="batch-control-label">Set Level:</span>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="thirdPartyLevel" value="DEBUG"> DEBUG
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="thirdPartyLevel" value="INFO"> INFO
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="thirdPartyLevel" value="WARNING"> WARN
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="thirdPartyLevel" value="ERROR"> ERROR
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="thirdPartyLevel" value="CRITICAL"> CRIT
+                                </label>
+                            </div>
+                        </div>
+                        <button class="btn btn-success" onclick="applyBatchSettings('thirdParty')">Apply to All</button>
+                    </div>
+                </div>
+                <table class="loggers-table">
+                    <thead>
+                        <tr>
+                            <th width="200">Logger Name</th>
+                            <th width="120">Enabled</th>
+                            <th width="150">Current Level</th>
+                            <th>Set Level</th>
+                            <th width="100">Handlers</th>
+                        </tr>
+                    </thead>
+                    <tbody id="thirdPartyTableBody">
+                        <!-- Dynamically populated -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Project loggers section -->
+            <div class="table-section">
+                <div class="table-header">
+                    <h2>Project Loggers</h2>
+                    <div class="batch-controls" onclick="event.stopPropagation()">
+                        <div class="batch-control-group">
+                            <span class="batch-control-label">Enable All:</span>
+                            <div class="tri-state-checkbox" id="projectEnableAll" onclick="toggleTriState(this)">
+                                <input type="checkbox">
+                                <div class="state-indicator"></div>
+                            </div>
+                        </div>
+                        <div class="batch-control-group">
+                            <span class="batch-control-label">Set Level:</span>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="projectLevel" value="DEBUG"> DEBUG
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="projectLevel" value="INFO"> INFO
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="projectLevel" value="WARNING"> WARN
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="projectLevel" value="ERROR"> ERROR
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="projectLevel" value="CRITICAL"> CRIT
+                                </label>
+                            </div>
+                        </div>
+                        <button class="btn btn-success" onclick="applyBatchSettings('project')">Apply to All</button>
+                    </div>
+                </div>
+                <table class="loggers-table">
+                    <thead>
+                        <tr>
+                            <th width="200">Logger Name</th>
+                            <th width="120">Enabled</th>
+                            <th width="150">Current Level</th>
+                            <th>Set Level</th>
+                            <th width="100">Handlers</th>
+                        </tr>
+                    </thead>
+                    <tbody id="projectTableBody">
+                        <!-- Dynamically populated -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <script>
         // Store current loggers data
         let currentLoggers = [];
+        let thirdPartyCollapsed = true; // Default to collapsed
 
         // DOMContentLoaded event handler
         document.addEventListener('DOMContentLoaded', function() {
             refreshLoggers();
         });
+
+        // Toggle section visibility
+        function toggleSection(sectionId) {
+            if (sectionId === 'thirdParty') {
+                thirdPartyCollapsed = !thirdPartyCollapsed;
+                const tableBody = document.getElementById('thirdPartyTableBody');
+                const toggleIcon = document.getElementById('thirdPartyToggle');
+
+                if (thirdPartyCollapsed) {
+                    tableBody.style.display = 'none';
+                    toggleIcon.textContent = '▶';
+                } else {
+                    tableBody.style.display = '';
+                    toggleIcon.textContent = '▼';
+                }
+            }
+        }
+
+        // Toggle tri-state checkbox
+        function toggleTriState(element) {
+            const states = ['', 'checked', 'indeterminate'];
+            const currentState = element.classList.contains('checked') ? 'checked' :
+                                element.classList.contains('indeterminate') ? 'indeterminate' : '';
+
+            // Cycle through states
+            element.classList.remove('checked', 'indeterminate');
+            const nextState = states[(states.indexOf(currentState) + 1) % states.length];
+            if (nextState) element.classList.add(nextState);
+        }
 
         // Refresh loggers from server
         async function refreshLoggers() {
@@ -352,78 +662,618 @@
             }
         }
 
-        // Display loggers in the table
-        function displayLoggers(loggers) {
-            const tbody = document.getElementById('loggersTableBody');
-            tbody.innerHTML = '';
+        // Build hierarchical tree structure from logger names
+        function buildLoggerTree(loggers) {
+            const root = { name: '', children: [], loggers: [] };
 
             loggers.forEach(logger => {
-                const row = document.createElement('tr');
-                row.setAttribute('data-logger-name', logger.name || 'root');
+                const parts = logger.name ? logger.name.split('.') : ['root'];
+                let currentNode = root;
 
-                // Logger name cell
-                const nameCell = document.createElement('td');
-                nameCell.className = 'logger-name';
-                nameCell.textContent = logger.name || 'root';
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    let childNode = currentNode.children.find(node => node.name === part);
 
-                // Enabled status checkbox
-                const enabledCell = document.createElement('td');
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'enabled-checkbox';
-                checkbox.checked = !logger.disabled;
-                checkbox.onchange = () => updateLoggerConfig(logger.name, null, checkbox.checked);
-                enabledCell.appendChild(checkbox);
+                    if (!childNode) {
+                        childNode = {
+                            name: part,
+                            fullName: parts.slice(0, i + 1).join('.'),
+                            children: [],
+                            loggers: []
+                        };
+                        currentNode.children.push(childNode);
+                    }
 
-                // Current level badge
-                const levelCell = document.createElement('td');
-                const levelBadge = document.createElement('span');
-                const effectiveLevel = logger.disabled ? 'DISABLED' : (logger.effective_level || 'NOTSET');
-                levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
-                levelBadge.textContent = effectiveLevel;
-                levelCell.appendChild(levelBadge);
+                    currentNode = childNode;
 
-                // Level setting radio buttons
-                const configCell = document.createElement('td');
-                const radioGroup = document.createElement('div');
-                radioGroup.className = 'radio-group';
+                    // Add logger to leaf node
+                    if (i === parts.length - 1) {
+                        currentNode.loggers.push(logger);
+                    }
+                }
+            });
 
-                const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
-                levels.forEach(level => {
-                    const label = document.createElement('label');
-                    label.className = 'radio-label';
+            // Sort children alphabetically
+            function sortChildren(node) {
+                node.children.sort((a, b) => a.name.localeCompare(b.name));
+                node.children.forEach(sortChildren);
+            }
 
-                    const radio = document.createElement('input');
-                    radio.type = 'radio';
-                    radio.name = `level-${logger.name}`;
-                    radio.value = level;
-                    radio.checked = logger.level === level;
-                    radio.disabled = logger.disabled;
-                    radio.onchange = () => updateLoggerConfig(logger.name, level, checkbox.checked);
+            sortChildren(root);
+            return root;
+        }
 
-                    label.appendChild(radio);
-                    label.appendChild(document.createTextNode(level));
-                    radioGroup.appendChild(label);
+        // Render tree nodes recursively
+        function renderTreeNode(node, depth, container, isThirdParty) {
+            // Render this node's loggers
+            node.loggers.forEach(logger => {
+                const row = createLoggerRow(logger, depth, node);
+                container.appendChild(row);
+            });
+
+            // Render children
+            node.children.forEach(child => {
+                renderTreeNode(child, depth + 1, container, isThirdParty);
+            });
+        }
+
+// Create logger row with proper indentation and parent controls
+function createLoggerRow(logger, depth, node, isThirdParty) {
+    const row = document.createElement('tr');
+    row.setAttribute('data-logger-name', logger.name || 'root');
+    row.setAttribute('data-node-path', node.fullName);
+
+    // Logger name cell with indentation
+    const nameCell = document.createElement('td');
+    nameCell.className = 'logger-name';
+    nameCell.style.minWidth = '300px';
+
+    const nameContainer = document.createElement('div');
+    nameContainer.className = 'tree-node';
+    nameContainer.style.display = 'flex';
+    nameContainer.style.alignItems = 'center';
+    nameContainer.style.gap = '8px';
+
+    // Add indentation based on depth
+    for (let i = 0; i < depth; i++) {
+        const indent = document.createElement('span');
+        indent.className = 'tree-indent';
+        indent.style.width = '20px';
+        indent.style.display = 'inline-block';
+        nameContainer.appendChild(indent);
+    }
+
+    // Add expand/collapse toggle for nodes with children
+    if (node.children.length > 0) {
+        const toggle = document.createElement('span');
+        toggle.className = 'tree-toggle';
+        toggle.textContent = '▼';
+        toggle.style.cursor = 'pointer';
+        toggle.style.width = '20px';
+        toggle.style.textAlign = 'center';
+        toggle.style.fontSize = '12px';
+        toggle.onclick = (e) => {
+            e.stopPropagation();
+            toggleTreeNode(node.fullName);
+        };
+        nameContainer.appendChild(toggle);
+    } else {
+        // Add spacer for leaf nodes to maintain alignment
+        const spacer = document.createElement('span');
+        spacer.style.width = '20px';
+        spacer.style.display = 'inline-block';
+        nameContainer.appendChild(spacer);
+    }
+
+    // Logger name span
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = logger.name || 'root';
+    nameSpan.style.fontWeight = '600';
+    nameSpan.style.color = '#2c3e50';
+    nameSpan.style.flex = '1';
+    nameContainer.appendChild(nameSpan);
+
+    // Add "Apply to Children" button for parent nodes (excluding root and leaf nodes)
+    if (node.children.length > 0 && node.name !== '' && depth >= 0) {
+        const applyBtn = document.createElement('button');
+        applyBtn.type = 'button';
+        applyBtn.className = 'apply-to-children-btn';
+        applyBtn.innerHTML = '➤'; // Unicode arrow, can also use '⤵' or '🎯'
+        applyBtn.title = 'Apply current settings to all child loggers';
+        applyBtn.style.background = 'transparent';
+        applyBtn.style.border = '1px solid #e0e0e0';
+        applyBtn.style.borderRadius = '4px';
+        applyBtn.style.cursor = 'pointer';
+        applyBtn.style.fontSize = '14px';
+        applyBtn.style.padding = '4px 8px';
+        applyBtn.style.marginLeft = '8px';
+        applyBtn.style.transition = 'all 0.2s ease';
+        applyBtn.style.opacity = '0.7';
+        applyBtn.style.width = '30px';
+        applyBtn.style.height = '24px';
+        applyBtn.style.display = 'flex';
+        applyBtn.style.alignItems = 'center';
+        applyBtn.style.justifyContent = 'center';
+
+        applyBtn.addEventListener('mouseenter', () => {
+            applyBtn.style.opacity = '1';
+            applyBtn.style.background = '#3498db';
+            applyBtn.style.borderColor = '#3498db';
+            applyBtn.style.color = 'white';
+            applyBtn.style.transform = 'scale(1.05)';
+        });
+
+        applyBtn.addEventListener('mouseleave', () => {
+            applyBtn.style.opacity = '0.7';
+            applyBtn.style.background = 'transparent';
+            applyBtn.style.borderColor = '#e0e0e0';
+            applyBtn.style.color = 'inherit';
+            applyBtn.style.transform = 'scale(1)';
+        });
+
+        applyBtn.onclick = (e) => {
+            e.stopPropagation();
+            applyToChildren(node.fullName);
+        };
+
+        nameContainer.appendChild(applyBtn);
+    }
+
+    nameCell.appendChild(nameContainer);
+
+    // Enabled status checkbox
+    const enabledCell = document.createElement('td');
+    enabledCell.style.width = '100px';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'enabled-checkbox';
+    checkbox.checked = !logger.disabled;
+    checkbox.onchange = () => updateLoggerConfig(logger.name, null, checkbox.checked);
+    enabledCell.appendChild(checkbox);
+
+    // Current level badge
+    const levelCell = document.createElement('td');
+    levelCell.style.width = '120px';
+    const levelBadge = document.createElement('span');
+    const effectiveLevel = logger.disabled ? 'DISABLED' : (logger.effective_level || 'NOTSET');
+    levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
+    levelBadge.textContent = effectiveLevel;
+    levelBadge.style.padding = '4px 8px';
+    levelBadge.style.borderRadius = '12px';
+    levelBadge.style.fontSize = '11px';
+    levelBadge.style.fontWeight = '600';
+    levelBadge.style.display = 'inline-block';
+    levelBadge.style.minWidth = '60px';
+    levelBadge.style.textAlign = 'center';
+
+    // Set level badge color based on level
+    switch(effectiveLevel.toLowerCase()) {
+        case 'debug':
+            levelBadge.style.background = '#d1ecf1';
+            levelBadge.style.color = '#0c5460';
+            break;
+        case 'info':
+            levelBadge.style.background = '#d4edda';
+            levelBadge.style.color = '#155724';
+            break;
+        case 'warning':
+            levelBadge.style.background = '#fff3cd';
+            levelBadge.style.color = '#856404';
+            break;
+        case 'error':
+            levelBadge.style.background = '#f8d7da';
+            levelBadge.style.color = '#721c24';
+            break;
+        case 'critical':
+            levelBadge.style.background = '#f5c6cb';
+            levelBadge.style.color = '#721c24';
+            break;
+        case 'disabled':
+            levelBadge.style.background = '#e2e3e5';
+            levelBadge.style.color = '#383d41';
+            break;
+        default:
+            levelBadge.style.background = '#e8f4f8';
+            levelBadge.style.color = '#2980b9';
+    }
+
+    levelCell.appendChild(levelBadge);
+
+    // Level setting radio buttons
+    const configCell = document.createElement('td');
+    const radioGroup = document.createElement('div');
+    radioGroup.className = 'radio-group';
+    radioGroup.style.display = 'flex';
+    radioGroup.style.gap = '8px';
+    radioGroup.style.flexWrap = 'wrap';
+    radioGroup.style.alignItems = 'center';
+
+    const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
+    levels.forEach(level => {
+        const label = document.createElement('label');
+        label.className = 'radio-label';
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.gap = '4px';
+        label.style.cursor = 'pointer';
+        label.style.padding = '4px 8px';
+        label.style.borderRadius = '4px';
+        label.style.transition = 'background 0.2s';
+        label.style.fontSize = '12px';
+
+        label.addEventListener('mouseenter', () => {
+            if (!logger.disabled) {
+                label.style.background = '#f8f9fa';
+            }
+        });
+
+        label.addEventListener('mouseleave', () => {
+            label.style.background = 'transparent';
+        });
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = `level-${logger.name || 'root'}`;
+        radio.value = level;
+        radio.checked = logger.level === level;
+        radio.disabled = logger.disabled;
+        radio.onchange = () => {
+            if (radio.checked) {
+                updateLoggerConfig(logger.name, level, !logger.disabled);
+            }
+        };
+
+        const levelText = document.createElement('span');
+        levelText.textContent = level;
+        levelText.style.fontSize = '11px';
+        levelText.style.fontWeight = '600';
+
+        label.appendChild(radio);
+        label.appendChild(levelText);
+        radioGroup.appendChild(label);
+    });
+
+    configCell.appendChild(radioGroup);
+
+    // Handlers count
+    const handlersCell = document.createElement('td');
+    handlersCell.style.width = '100px';
+    const handlersBadge = document.createElement('span');
+    handlersBadge.className = 'handlers-count';
+    handlersBadge.textContent = `${logger.handlers_count || 0} handlers`;
+    handlersBadge.style.background = '#e8f4f8';
+    handlersBadge.style.color = '#2980b9';
+    handlersBadge.style.padding = '4px 8px';
+    handlersBadge.style.borderRadius = '10px';
+    handlersBadge.style.fontSize = '11px';
+    handlersBadge.style.fontWeight = '600';
+    handlersCell.appendChild(handlersBadge);
+
+    // Append all cells to row
+    row.appendChild(nameCell);
+    row.appendChild(enabledCell);
+    row.appendChild(levelCell);
+    row.appendChild(configCell);
+    row.appendChild(handlersCell);
+
+    return row;
+}
+
+        // Toggle tree node expansion/collapse
+        function toggleTreeNode(nodePath) {
+            const allRows = document.querySelectorAll('tr[data-node-path]');
+            let currentRow = null;
+            let startIndex = -1;
+
+            // Find the row with the matching node path
+            allRows.forEach((row, index) => {
+                if (row.getAttribute('data-node-path') === nodePath) {
+                    currentRow = row;
+                    startIndex = index;
+                }
+            });
+
+            if (!currentRow || startIndex === -1) return;
+
+            const currentDepth = currentRow.querySelectorAll('.tree-indent').length;
+            const toggle = currentRow.querySelector('.tree-toggle');
+
+            // Check if children are currently visible
+            let isCollapsed = false;
+            if (startIndex + 1 < allRows.length) {
+                const nextRowDepth = allRows[startIndex + 1].querySelectorAll('.tree-indent').length;
+                isCollapsed = nextRowDepth <= currentDepth;
+            }
+
+            // Toggle children visibility
+            for (let i = startIndex + 1; i < allRows.length; i++) {
+                const row = allRows[i];
+                const rowDepth = row.querySelectorAll('.tree-indent').length;
+
+                // Stop when we reach a node at the same or higher level
+                if (rowDepth <= currentDepth) break;
+
+                if (rowDepth === currentDepth + 1) {
+                    if (isCollapsed) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            }
+
+            // Update toggle icon
+            if (toggle) {
+                toggle.textContent = isCollapsed ? '▶' : '▼';
+            }
+        }
+
+        // Apply settings to all children of a node
+        function applyToChildren(nodeFullPath) {
+            // Collect all child logger names
+            const childLoggerNames = [];
+            const allRows = document.querySelectorAll('tr[data-node-path]');
+
+            allRows.forEach(row => {
+                const rowPath = row.getAttribute('data-node-path');
+                const loggerName = row.getAttribute('data-logger-name');
+
+                // Include direct children and deeper descendants
+                if (rowPath && rowPath.startsWith(nodeFullPath + '.') && loggerName && loggerName !== 'root') {
+                    childLoggerNames.push(loggerName);
+                }
+            });
+
+            if (childLoggerNames.length === 0) {
+                showStatusMessage('⚠️ No child loggers found for this node', 'error');
+                return;
+            }
+
+            // Get current parent node settings
+            const parentRow = document.querySelector(`tr[data-node-path="${nodeFullPath}"]`);
+            if (!parentRow) return;
+
+            const enabledCheckbox = parentRow.querySelector('.enabled-checkbox');
+            const levelRadios = parentRow.querySelectorAll('input[type="radio"]:checked');
+
+            const enabled = enabledCheckbox ? enabledCheckbox.checked : true;
+            let level = null;
+
+            for (const radio of levelRadios) {
+                if (radio.checked) {
+                    level = radio.value;
+                    break;
+                }
+            }
+
+            // If no level is selected, use the current effective level
+            if (!level) {
+                const levelBadge = parentRow.querySelector('.level-badge');
+                if (levelBadge) {
+                    level = levelBadge.textContent;
+                }
+            }
+
+            // Apply settings to all children
+            applySettingsToLoggers(childLoggerNames, level, enabled);
+        }
+
+        // Apply settings to multiple loggers
+        async function applySettingsToLoggers(loggerNames, level, enabled) {
+            if (loggerNames.length === 0) return;
+
+            try {
+                const response = await fetch('/logger/api/config_logger', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        names: loggerNames,
+                        level: level,
+                        enabled: enabled
+                    })
                 });
 
-                configCell.appendChild(radioGroup);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
 
-                // Handlers count
-                const handlersCell = document.createElement('td');
-                const handlersBadge = document.createElement('span');
-                handlersBadge.className = 'handlers-count';
-                handlersBadge.textContent = `${logger.handlers_count || 0} handlers`;
-                handlersCell.appendChild(handlersBadge);
+                const data = await response.json();
 
-                // Append all cells to row
-                row.appendChild(nameCell);
-                row.appendChild(enabledCell);
-                row.appendChild(levelCell);
-                row.appendChild(configCell);
-                row.appendChild(handlersCell);
+                if (data.success) {
+                    showStatusMessage(`✅ ${loggerNames.length} loggers updated successfully`, 'success');
+                    refreshLoggers();
+                } else {
+                    throw new Error(data.error || 'Failed to update configuration');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showStatusMessage('❌ Batch update failed: ' + error.message, 'error');
+            }
+        }
 
-                tbody.appendChild(row);
+        // Apply settings to all children of a node
+        function applyToChildren(nodeFullPath) {
+            // 收集所有属于这个父节点子树的日志器名称
+            const childLoggerNames = [];
+
+            // 遍历所有日志器
+            currentLoggers.forEach(logger => {
+                const loggerName = logger.name || 'root';
+                // 判断条件：子日志器的名称以父节点路径开头，并且长度比父节点路径长（确保是直系子节点）
+                if (loggerName.startsWith(nodeFullPath + '.') || (nodeFullPath === '' && loggerName !== 'root')) {
+                    childLoggerNames.push(loggerName);
+                }
             });
+
+            if (childLoggerNames.length === 0) {
+                showStatusMessage('⚠️ No child loggers found for this node', 'error');
+                return;
+            }
+
+            // 获取当前行的设置（启用状态和级别）
+            const row = document.querySelector(`tr[data-node-path="${nodeFullPath}"]`);
+            const enabledCheckbox = row.querySelector('.enabled-checkbox');
+            const levelRadios = row.querySelectorAll('input[type="radio"]');
+            let selectedLevel = null;
+
+            for (const radio of levelRadios) {
+                if (radio.checked) {
+                    selectedLevel = radio.value;
+                    break;
+                }
+            }
+
+            const enabled = enabledCheckbox.checked;
+
+            // 使用批量设置函数
+            applySettingsToLoggers(childLoggerNames, selectedLevel, enabled);
+        }
+
+        // Display loggers in separate tables with tree structure
+        function displayLoggers(loggers) {
+            // Separate loggers into project and third-party
+            const projectLoggers = loggers.filter(logger => logger.in_project);
+            const thirdPartyLoggers = loggers.filter(logger => !logger.in_project);
+
+            // Build trees
+            const projectTree = buildLoggerTree(projectLoggers);
+            const thirdPartyTree = buildLoggerTree(thirdPartyLoggers);
+
+            // Clear tables
+            const projectBody = document.getElementById('projectTableBody');
+            const thirdPartyBody = document.getElementById('thirdPartyTableBody');
+            projectBody.innerHTML = '';
+            thirdPartyBody.innerHTML = '';
+
+            // Render trees
+            renderTreeNode(projectTree, 0, projectBody, false);
+            renderTreeNode(thirdPartyTree, 0, thirdPartyBody, true);
+
+            // Update batch control states
+            updateBatchControlState('project', projectLoggers);
+            updateBatchControlState('thirdParty', thirdPartyLoggers);
+
+            // Apply default collapsed state for third-party
+            if (thirdPartyCollapsed) {
+                thirdPartyBody.style.display = 'none';
+                document.getElementById('thirdPartyToggle').textContent = '▶';
+            }
+        }
+
+        // Update batch control states based on current loggers
+        function updateBatchControlState(section, loggers) {
+            const enableCheckbox = document.getElementById(`${section}EnableAll`);
+            const levelRadios = document.querySelectorAll(`input[name="${section}Level"]`);
+
+            // Reset controls
+            enableCheckbox.classList.remove('checked', 'indeterminate');
+            levelRadios.forEach(radio => radio.checked = false);
+
+            if (loggers.length === 0) return;
+
+            // Calculate enabled state
+            const enabledCount = loggers.filter(logger => !logger.disabled).length;
+            if (enabledCount === loggers.length) {
+                enableCheckbox.classList.add('checked');
+            } else if (enabledCount === 0) {
+                // Unchecked state (no class)
+            } else {
+                enableCheckbox.classList.add('indeterminate');
+            }
+
+            // Calculate level state
+            const levelCounts = {};
+            loggers.forEach(logger => {
+                if (logger.level) {
+                    levelCounts[logger.level] = (levelCounts[logger.level] || 0) + 1;
+                }
+            });
+
+            // Find most common level
+            let maxLevel = null;
+            let maxCount = 0;
+            for (const [level, count] of Object.entries(levelCounts)) {
+                if (count > maxCount) {
+                    maxLevel = level;
+                    maxCount = count;
+                }
+            }
+
+            // Select radio if majority share the same level
+            if (maxCount / loggers.length > 0.5) {
+                const radio = document.querySelector(`input[name="${section}Level"][value="${maxLevel}"]`);
+                if (radio) radio.checked = true;
+            }
+        }
+
+        // Apply batch settings to a section
+        async function applyBatchSettings(section) {
+            const loggers = currentLoggers.filter(logger =>
+                section === 'project' ? logger.in_project : !logger.in_project
+            );
+
+            if (loggers.length === 0) {
+                showStatusMessage(`⚠️ No loggers in ${section} section`, 'error');
+                return;
+            }
+
+            const enableCheckbox = document.getElementById(`${section}EnableAll`);
+            const levelRadios = document.querySelectorAll(`input[name="${section}Level"]:checked`);
+
+            // Determine enabled state
+            let enabled = undefined;
+            if (enableCheckbox.classList.contains('checked')) {
+                enabled = true;
+            } else if (!enableCheckbox.classList.contains('indeterminate')) {
+                enabled = false;
+            }
+
+            // Determine level
+            let level = levelRadios.length > 0 ? levelRadios[0].value : null;
+
+            // Collect logger names
+            const loggerNames = loggers.map(logger => logger.name || 'root');
+
+            // Apply settings
+            applySettingsToLoggers(loggerNames, level, enabled);
+        }
+
+        // Apply settings to a list of loggers
+        async function applySettingsToLoggers(loggerNames, level, enabled) {
+            if (loggerNames.length === 0) return;
+
+            try {
+                // Send request to backend API
+                const response = await fetch('/logger/api/config_logger', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        names: loggerNames,
+                        level: level,
+                        enabled: enabled
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatusMessage(`✅ ${loggerNames.length} loggers updated`, 'success');
+                    refreshLoggers();
+                } else {
+                    throw new Error(data.error || 'Failed to update configuration');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showStatusMessage('❌ Batch update failed: ' + error.message, 'error');
+            }
         }
 
         // Update logger configuration
@@ -545,9 +1395,6 @@
             document.getElementById('lastUpdate').textContent =
                 now.toLocaleTimeString() + ' ' + now.toLocaleDateString();
         }
-
-        // Auto-refresh every 30 seconds
-        setInterval(refreshLoggers, 30000);
     </script>
 </body>
 </html>

@@ -297,25 +297,88 @@ class LoggerBackend:
             return jsonify({'success': False, 'error': str(e)})
 
     def config_logger(self):
-        """Update logger configuration"""
+        """Update logger configuration for one or multiple loggers.
+
+        Supports two parameters:
+        - 'name': Single logger name (for backward compatibility)
+        - 'names': List of logger names
+        At least one of these must be provided.
+        """
         try:
             data = request.get_json()
+            # Extract parameters
             logger_name = data.get('name')
+            logger_names = data.get('names')
             level = data.get('level')
             enabled = data.get('enabled', True)
 
-            if not logger_name:
-                return jsonify({'success': False, 'error': 'Logger name cannot be empty'})
+            # Validate at least one name parameter exists
+            if not logger_name and not logger_names:
+                return jsonify({
+                    'success': False,
+                    'error': 'Must provide either "name" or "names" parameter'
+                })
 
-            success = self.logger_manager.set_logger_level(logger_name, level, enabled)
-            if success:
-                logger.info(f"Logger '{logger_name}' configuration updated: level={level}, enabled={enabled}")
-                return jsonify({'success': True})
+            # Create combined list of names to process
+            names_to_update = []
+            if logger_names:
+                if isinstance(logger_names, list):
+                    names_to_update.extend(logger_names)
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': '"names" must be a list of strings'
+                    })
+            if logger_name:
+                names_to_update.append(logger_name)
+
+            # Process each logger
+            success_count = 0
+            for name in names_to_update:
+                if not name:
+                    continue  # Skip empty names
+                if self.logger_manager.set_logger_level(name, level, enabled):
+                    logger.info(f"Logger '{name}' updated: level={level}, enabled={enabled}")
+                    success_count += 1
+
+            # Return results
+            total = len(names_to_update)
+            if success_count == total:
+                return jsonify({
+                    'success': True,
+                    'message': f'Successfully updated {success_count} loggers'
+                })
             else:
-                return jsonify({'success': False, 'error': 'Failed to update logger configuration'})
+                return jsonify({
+                    'success': False,
+                    'error': f'Updated {success_count}/{total} loggers',
+                    'updated_count': success_count,
+                    'failed_count': total - success_count
+                })
 
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
+
+    # def config_logger(self):
+    #     """Update logger configuration"""
+    #     try:
+    #         data = request.get_json()
+    #         logger_name = data.get('name')
+    #         level = data.get('level')
+    #         enabled = data.get('enabled', True)
+    #
+    #         if not logger_name:
+    #             return jsonify({'success': False, 'error': 'Logger name cannot be empty'})
+    #
+    #         success = self.logger_manager.set_logger_level(logger_name, level, enabled)
+    #         if success:
+    #             logger.info(f"Logger '{logger_name}' configuration updated: level={level}, enabled={enabled}")
+    #             return jsonify({'success': True})
+    #         else:
+    #             return jsonify({'success': False, 'error': 'Failed to update logger configuration'})
+    #
+    #     except Exception as e:
+    #         return jsonify({'success': False, 'error': str(e)})
 
 
 # ----------------------------------------------------------------------------------------------------------------------
