@@ -1,6 +1,8 @@
+import logging
 import os
 import time
 import json
+import logging
 import argparse
 import traceback
 import threading
@@ -13,13 +15,27 @@ if __name__ == '__main__':
 else:
     from .LogFileWrapper import LogFileWrapper
 
+logger = logging.getLogger(__name__)
 self_path = os.path.dirname(os.path.abspath(__file__))
 
 
 class LoggerBackend:
-    def __init__(self, monitoring_file_path: str, cache_limit_count: int, link_file_roots: dict = None):
+    def __init__(self,
+                 monitoring_file_path: str,
+                 cache_limit_count: int,
+                 link_file_roots: dict = None,
+                 with_logger_manager: bool = False):
+
         self.log_file = monitoring_file_path
         self.cache_limit_count = cache_limit_count
+
+        # If you run LoggerBackend standalone. LoggerManager is useless.
+        if with_logger_manager:
+            from LoggerManager import LoggerManager
+            self.logger_manager = LoggerManager()
+        else:
+            self.logger_manager = None
+
         self.last_validation_time = time.time()
         self.flask_thread = None
         self.app = None
@@ -110,6 +126,11 @@ class LoggerBackend:
             maybe_wrap(self.serve_link_file),
             methods=['GET']
         )
+
+        if self.logger_manager:
+            self.app.add_url_rule('/logger/logger_config', 'logger_config', maybe_wrap(self.logger_config))
+            self.app.add_url_rule('/logger/api/get_loggers', 'get_loggers', maybe_wrap(self.get_loggers), methods=['GET'])
+            self.app.add_url_rule('/logger/api/config_logger', 'config_logger', maybe_wrap(self.config_logger), methods=['POST'])
 
     # ------------------------------------------ Web Service ------------------------------------------
 
@@ -260,6 +281,42 @@ class LoggerBackend:
         except FileNotFoundError:
             abort(404)
 
+    # --------------------------------- Logger Manager Related ---------------------------------
+
+    def logger_config(self):
+        return send_file(os.path.join(self_path, 'LoggerConfig.html'))
+
+    def get_loggers(self):
+        """Get all logger information"""
+        try:
+            loggers = self.logger_manager.get_all_loggers()
+            return jsonify({'success': True, 'loggers': loggers})
+        except Exception as e:
+            print(str(e))
+            print(traceback.format_exc())
+            return jsonify({'success': False, 'error': str(e)})
+
+    def config_logger(self):
+        """Update logger configuration"""
+        try:
+            data = request.get_json()
+            logger_name = data.get('name')
+            level = data.get('level')
+            enabled = data.get('enabled', True)
+
+            if not logger_name:
+                return jsonify({'success': False, 'error': 'Logger name cannot be empty'})
+
+            success = self.logger_manager.set_logger_level(logger_name, level, enabled)
+            if success:
+                logger.info(f"Logger '{logger_name}' configuration updated: level={level}, enabled={enabled}")
+                return jsonify({'success': True})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to update logger configuration'})
+
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -291,7 +348,8 @@ def main():
     # Standalone service with command line arguments
     backend = LoggerBackend(
         monitoring_file_path=args.monitoring_file_path,
-        cache_limit_count=args.cache_limit_count
+        cache_limit_count=args.cache_limit_count,
+        with_logger_manager=True
     )
 
     if args.verbose:

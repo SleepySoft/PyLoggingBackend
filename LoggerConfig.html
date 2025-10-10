@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Logging Configuration Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #219a52;
+        }
+
+        .loggers-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .loggers-table th {
+            background: #34495e;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .loggers-table td {
+            padding: 15px;
+            border-bottom: 1px solid #ecf0f1;
+            transition: all 0.3s ease;
+        }
+
+        .loggers-table tr {
+            transition: all 0.3s ease;
+        }
+
+        .loggers-table tr.updating {
+            background-color: rgba(255, 235, 59, 0.2);
+        }
+
+        .loggers-table tr.success-update {
+            background-color: rgba(46, 204, 113, 0.2);
+            animation: fadeHighlight 2s forwards;
+        }
+
+        .loggers-table tr.error-update {
+            background-color: rgba(231, 76, 60, 0.2);
+            animation: fadeHighlight 2s forwards;
+        }
+
+        @keyframes fadeHighlight {
+            from { background-color: rgba(46, 204, 113, 0.2); }
+            to { background-color: transparent; }
+        }
+
+        .loggers-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .logger-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .level-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+            min-width: 70px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .level-debug { background: #d1ecf1; color: #0c5460; }
+        .level-info { background: #d1edf1; color: #155724; }
+        .level-warning { background: #fff3cd; color: #856404; }
+        .level-error { background: #f8d7da; color: #721c24; }
+        .level-critical { background: #f5c6cb; color: #721c24; }
+        .level-disabled { background: #e2e3e5; color: #383d41; }
+
+        .radio-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .radio-label:hover {
+            background: #f8f9fa;
+        }
+
+        .enabled-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .status-container {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .status-message {
+            padding: 15px 30px;
+            border-radius: 8px;
+            display: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            animation: slideDown 0.5s ease-out;
+            max-width: 80%;
+            text-align: center;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+        }
+
+        .handlers-count {
+            background: #e8f4f8;
+            color: #2980b9;
+            padding: 4px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+
+        .last-update {
+            background: #e8f4f8;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .controls {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .radio-group {
+                justify-content: center;
+            }
+
+            .loggers-table th,
+            .loggers-table td {
+                padding: 10px;
+            }
+
+            .level-badge {
+                min-width: 60px;
+                padding: 3px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Dynamic Logging Manager</h1>
+            <p>Real-time configuration management for Python applications</p>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" onclick="refreshLoggers()">
+                <span class="icon">🔄</span> Refresh Configuration
+            </button>
+            <div class="last-update">
+                Last Updated: <span id="lastUpdate">Never</span>
+            </div>
+        </div>
+
+        <div class="status-container">
+            <div id="statusMessage" class="status-message"></div>
+        </div>
+
+        <div id="loading" class="loading">
+            <h3>⏳ Loading Logging Configuration...</h3>
+        </div>
+
+        <div id="loggersContainer" style="display: none;">
+            <table class="loggers-table">
+                <thead>
+                    <tr>
+                        <th width="200">Logger Name</th>
+                        <th width="120">Enabled</th>
+                        <th width="150">Current Level</th>
+                        <th>Set Level</th>
+                        <th width="100">Handlers</th>
+                    </tr>
+                </thead>
+                <tbody id="loggersTableBody">
+                    <!-- Dynamically populated -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Store current loggers data
+        let currentLoggers = [];
+
+        // DOMContentLoaded event handler
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshLoggers();
+        });
+
+        // Refresh loggers from server
+        async function refreshLoggers() {
+            showLoading(true);
+            hideStatusMessage();
+
+            try {
+                const response = await fetch('/logger/api/get_loggers');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentLoggers = data.loggers;
+                    displayLoggers(currentLoggers);
+                    updateLastUpdateTime();
+                    showStatusMessage('✅ Logger configuration loaded successfully', 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to fetch logger configuration');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showStatusMessage('❌ Failed to load configuration: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Display loggers in the table
+        function displayLoggers(loggers) {
+            const tbody = document.getElementById('loggersTableBody');
+            tbody.innerHTML = '';
+
+            loggers.forEach(logger => {
+                const row = document.createElement('tr');
+                row.setAttribute('data-logger-name', logger.name || 'root');
+
+                // Logger name cell
+                const nameCell = document.createElement('td');
+                nameCell.className = 'logger-name';
+                nameCell.textContent = logger.name || 'root';
+
+                // Enabled status checkbox
+                const enabledCell = document.createElement('td');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'enabled-checkbox';
+                checkbox.checked = !logger.disabled;
+                checkbox.onchange = () => updateLoggerConfig(logger.name, null, checkbox.checked);
+                enabledCell.appendChild(checkbox);
+
+                // Current level badge
+                const levelCell = document.createElement('td');
+                const levelBadge = document.createElement('span');
+                const effectiveLevel = logger.disabled ? 'DISABLED' : (logger.effective_level || 'NOTSET');
+                levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
+                levelBadge.textContent = effectiveLevel;
+                levelCell.appendChild(levelBadge);
+
+                // Level setting radio buttons
+                const configCell = document.createElement('td');
+                const radioGroup = document.createElement('div');
+                radioGroup.className = 'radio-group';
+
+                const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
+                levels.forEach(level => {
+                    const label = document.createElement('label');
+                    label.className = 'radio-label';
+
+                    const radio = document.createElement('input');
+                    radio.type = 'radio';
+                    radio.name = `level-${logger.name}`;
+                    radio.value = level;
+                    radio.checked = logger.level === level;
+                    radio.disabled = logger.disabled;
+                    radio.onchange = () => updateLoggerConfig(logger.name, level, checkbox.checked);
+
+                    label.appendChild(radio);
+                    label.appendChild(document.createTextNode(level));
+                    radioGroup.appendChild(label);
+                });
+
+                configCell.appendChild(radioGroup);
+
+                // Handlers count
+                const handlersCell = document.createElement('td');
+                const handlersBadge = document.createElement('span');
+                handlersBadge.className = 'handlers-count';
+                handlersBadge.textContent = `${logger.handlers_count || 0} handlers`;
+                handlersCell.appendChild(handlersBadge);
+
+                // Append all cells to row
+                row.appendChild(nameCell);
+                row.appendChild(enabledCell);
+                row.appendChild(levelCell);
+                row.appendChild(configCell);
+                row.appendChild(handlersCell);
+
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update logger configuration
+        async function updateLoggerConfig(loggerName, level, enabled) {
+            const row = document.querySelector(`tr[data-logger-name="${loggerName || 'root'}"]`);
+            if (row) row.classList.add('updating');
+
+            try {
+                // Use current level if not specified
+                if (!level) {
+                    const currentLogger = currentLoggers.find(l => l.name === loggerName);
+                    if (currentLogger) level = currentLogger.level;
+                }
+
+                // Send request to backend API
+                const response = await fetch('/logger/api/config_logger', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: loggerName,
+                        level: level,
+                        enabled: enabled
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update UI with actual server response
+                    updateLoggerRow(loggerName, level, enabled);
+                    showStatusMessage(`✅ Logger "${loggerName}" updated successfully`, 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to update configuration');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showStatusMessage('❌ Update failed: ' + error.message, 'error');
+                if (row) {
+                    row.classList.remove('updating');
+                    row.classList.add('error-update');
+                    setTimeout(() => row.classList.remove('error-update'), 2000);
+
+                    // Revert to previous state on error
+                    refreshLoggers();
+                }
+            }
+        }
+
+        // Update single logger row after configuration change
+        function updateLoggerRow(loggerName, newLevel, enabled) {
+            const row = document.querySelector(`tr[data-logger-name="${loggerName || 'root'}"]`);
+            if (!row) return;
+
+            // Update enabled checkbox
+            const checkbox = row.querySelector('.enabled-checkbox');
+            if (checkbox) checkbox.checked = enabled;
+
+            // Update current level badge
+            const levelBadge = row.querySelector('.level-badge');
+            if (levelBadge) {
+                const effectiveLevel = enabled ? (newLevel || levelBadge.textContent) : 'DISABLED';
+                levelBadge.textContent = effectiveLevel;
+                levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
+            }
+
+            // Update radio buttons
+            const radios = row.querySelectorAll('input[type="radio"]');
+            radios.forEach(radio => {
+                radio.disabled = !enabled;
+                if (newLevel && radio.value === newLevel) {
+                    radio.checked = true;
+                }
+            });
+
+            // Update currentLoggers data
+            const loggerIndex = currentLoggers.findIndex(l => l.name === loggerName);
+            if (loggerIndex !== -1) {
+                currentLoggers[loggerIndex].disabled = !enabled;
+                if (newLevel) currentLoggers[loggerIndex].level = newLevel;
+            }
+
+            // Visual feedback
+            row.classList.remove('updating');
+            row.classList.add('success-update');
+            setTimeout(() => row.classList.remove('success-update'), 2000);
+        }
+
+        // Show/hide loading indicator
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+            document.getElementById('loggersContainer').style.display = show ? 'none' : 'block';
+        }
+
+        // Show status message
+        function showStatusMessage(message, type) {
+            const messageDiv = document.getElementById('statusMessage');
+            messageDiv.textContent = message;
+            messageDiv.className = `status-message status-${type}`;
+            messageDiv.style.display = 'block';
+
+            // Auto-hide after 5 seconds
+            setTimeout(hideStatusMessage, 5000);
+        }
+
+        // Hide status message
+        function hideStatusMessage() {
+            document.getElementById('statusMessage').style.display = 'none';
+        }
+
+        // Update last update time
+        function updateLastUpdateTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent =
+                now.toLocaleTimeString() + ' ' + now.toLocaleDateString();
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(refreshLoggers, 30000);
+    </script>
+</body>
+</html>
