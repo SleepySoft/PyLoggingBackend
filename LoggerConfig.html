@@ -732,6 +732,7 @@
             // 用 fullName 做唯一 key
             nodeRow.setAttribute('data-node-path', node.fullName);
             nodeRow.setAttribute('data-collapsed', 'false');   // 默认展开
+            nodeRow.setAttribute('data-depth', depth);
 
             const nameCell = document.createElement('td');
             nameCell.className = 'logger-name';
@@ -745,24 +746,24 @@
 
             // 缩进
             for (let i = 0; i < depth; i++) {
-            const indent = document.createElement('span');
-            indent.className = 'tree-indent';
-            indent.style.width = '20px';
-            indent.style.display = 'inline-block';
-            nameContainer.appendChild(indent);
+                const indent = document.createElement('span');
+                indent.className = 'tree-indent';
+                indent.style.width = '20px';
+                indent.style.display = 'inline-block';
+                nameContainer.appendChild(indent);
             }
 
             // 折叠按钮
             const toggle = document.createElement('span');
-            toggle.className = 'tree-toggle';
-            toggle.textContent = '▼';
-            toggle.style.cursor = 'pointer';
-            toggle.style.width = '20px';
-            toggle.style.textAlign = 'center';
-            toggle.style.fontSize = '12px';
-            toggle.onclick = (e) => {
-            e.stopPropagation();
-            toggleTreeNode(node.fullName);
+                toggle.className = 'tree-toggle';
+                toggle.textContent = '▼';
+                toggle.style.cursor = 'pointer';
+                toggle.style.width = '20px';
+                toggle.style.textAlign = 'center';
+                toggle.style.fontSize = '12px';
+                toggle.onclick = (e) => {
+                e.stopPropagation();
+                toggleTreeNode(node.fullName);
             };
             nameContainer.appendChild(toggle);
 
@@ -785,6 +786,7 @@
         // 2. 再渲染该节点下的 logger（叶子）
         node.loggers.forEach(logger => {
             const row = createLoggerRow(logger, node.name === '' ? 0 : depth + 1); // 叶子再缩进一级
+            row.setAttribute('data-depth', node.name === '' ? 0 : depth + 1);
             container.appendChild(row);
         });
 
@@ -838,7 +840,7 @@
             nameSpan.style.flex = '1';
             nameContainer.appendChild(nameSpan);
 
-  nameCell.appendChild(nameContainer);
+            nameCell.appendChild(nameContainer);
 
             // Enabled status checkbox
             const enabledCell = document.createElement('td');
@@ -980,47 +982,39 @@
 
         // Toggle tree node expansion/collapse
         function toggleTreeNode(nodePath) {
-            const allRows = document.querySelectorAll('tr[data-node-path]');
-            let currentRow = null;
-            let startIndex = -1;
+        // 这次收集“所有行”，而不是只带 data-node-path 的
+        const allRows = document.querySelectorAll('#projectTableBody tr, #thirdPartyTableBody tr');
+        let startIndex = -1;
+        let currentDepth;
 
-            // Find the row with the matching node path
-            allRows.forEach((row, index) => {
-                if (row.getAttribute('data-node-path') === nodePath) {
-                    currentRow = row;
-                    startIndex = index;
-                }
-            });
-
-            if (!currentRow || startIndex === -1) return;
-
-            const currentDepth = currentRow.querySelectorAll('.tree-indent').length;
-            const toggle = currentRow.querySelector('.tree-toggle');
-            const isCollapsed = currentRow.getAttribute('data-collapsed') === 'true';
-
-            // Toggle collapsed state
-            currentRow.setAttribute('data-collapsed', (!isCollapsed).toString());
-
-            if (toggle) {
-                toggle.textContent = isCollapsed ? '▼' : '▶';
+        // 先找到被点击的节点行
+        allRows.forEach((row, idx) => {
+            if (row.getAttribute('data-node-path') === nodePath) {
+            startIndex = idx;
+            currentDepth = parseInt(row.getAttribute('data-depth'), 10);
             }
+        });
 
-            // Toggle children visibility
-            for (let i = startIndex + 1; i < allRows.length; i++) {
-                const row = allRows[i];
-                const rowDepth = row.querySelectorAll('.tree-indent').length;
+        if (startIndex === -1) return;
 
-                // Stop when we reach a node at the same or higher level
-                if (rowDepth <= currentDepth) break;
+        const nodeRow = allRows[startIndex];
+        const isCollapsed = nodeRow.getAttribute('data-collapsed') === 'true';
+        nodeRow.setAttribute('data-collapsed', String(!isCollapsed));
 
-                if (rowDepth === currentDepth + 1) {
-                    if (isCollapsed) {
-                        row.style.display = '';
-                    } else {
-                        row.style.display = 'none';
-                    }
-                }
+        const toggle = nodeRow.querySelector('.tree-toggle');
+        if (toggle) toggle.textContent = isCollapsed ? '▼' : '▶';
+
+        // 从下一行开始，遇到同层或更浅层就停
+        for (let i = startIndex + 1; i < allRows.length; i++) {
+            const row = allRows[i];
+            const rowDepth = parseInt(row.getAttribute('data-depth'), 10);
+            if (rowDepth <= currentDepth) break;
+
+            // 只处理直接子层（currentDepth+1）即可，更深层的可见性由它们自己状态决定
+            if (rowDepth === currentDepth + 1) {
+            row.style.display = isCollapsed ? '' : 'none';
             }
+        }
         }
 
         // Apply settings to all children of a node
