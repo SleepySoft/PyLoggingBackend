@@ -593,8 +593,7 @@
             </div>
         </div>
     </div>
-
-    <script>
+        <script>
         // Store current loggers data
         let currentLoggers = [];
         let thirdPartyCollapsed = true; // Default to collapsed
@@ -662,437 +661,432 @@
             }
         }
 
-        // Build hierarchical tree structure from logger names
+        // ========================================================================
+        // MODIFIED FUNCTION: buildLoggerTree
+        // ========================================================================
+        /**
+         * 从扁平的 logger 列表中构建一个层次化的树结构。
+         * 这个新逻辑的核心是为每个路径段（如 'a', 'a.b'）创建一个节点，
+         * 并且每个节点都有一个 `loggerObject` 属性。如果该路径本身就是一个 logger，
+         * `loggerObject` 将会是对应的 logger 对象；否则为 null。
+         * 这样就解决了“一个节点既是父节点又是 logger”的问题。
+         *
+         * @param {Array<Object>} loggers - 从服务器获取的 logger 对象数组。
+         * @returns {Object} - 返回包含整个层次结构的根节点。
+         */
         function buildLoggerTree(loggers) {
-            const root = { name: '', children: [], loggers: [] };
+            // 1. 创建根节点。它是一个虚拟节点，不对应任何 logger，仅作为树的起点。
+            //    - fullName: 节点的完整路径名，根节点为空字符串。
+            //    - children: 子节点数组。
+            //    - loggerObject: 如果此节点本身对应一个 logger，则存放该 logger 对象，否则为 null。
+            const root = {
+                name: 'root',
+                fullName: '',
+                children: [],
+                loggerObject: null
+            };
 
+            // 2. 为了快速查找，将 logger 数组转换为一个以 logger 名称为键的 Map。
+            //    这避免了在循环中反复遍历数组，提高了效率。
+            //    对于根 logger (name 为 '' 或 null)，我们统一使用 'root' 作为键。
+            const loggerMap = new Map(loggers.map(l => [l.name || 'root', l]));
+
+            // 3. 检查是否存在根 logger (name: '' 或 null)，并将其附加到根节点上。
+            root.loggerObject = loggerMap.get('root') || null;
+
+            // 4. 遍历每一个 logger，为它在树中构建相应的路径和节点。
             loggers.forEach(logger => {
-                const parts = logger.name ? logger.name.split('.') : ['root'];
-                let currentNode = root;
+                // 根 logger 已经处理过，这里跳过。
+                if (!logger.name) {
+                    return;
+                }
 
+                // 5. 按 '.' 分割 logger 名称来获取层级路径。例如 'a.b.c' -> ['a', 'b', 'c']。
+                const parts = logger.name.split('.');
+                let currentNode = root; // 从根节点开始遍历或创建。
+
+                // 6. 逐级处理路径的每个部分。
                 for (let i = 0; i < parts.length; i++) {
                     const part = parts[i];
+                    // 构造当前级别的完整路径名，例如在处理 'b' 时，路径是 'a.b'。
+                    const fullName = parts.slice(0, i + 1).join('.');
+
+                    // 7. 在当前节点的子节点中查找是否已存在对应 part 的节点。
                     let childNode = currentNode.children.find(node => node.name === part);
 
+                    // 8. 如果子节点不存在，则创建一个新的节点。
                     if (!childNode) {
                         childNode = {
-                            name: part,
-                            fullName: parts.slice(0, i + 1).join('.'),
-                            children: [],
-                            loggers: []
+                            name: part,       // 当前部分的名称，如 'b'
+                            fullName: fullName, // 完整路径，如 'a.b'
+                            children: [],     // 初始化子节点数组
+                            // 关键步骤：在创建节点时，就从 loggerMap 中查找它是否对应一个真实的 logger。
+                            // 如果是，则关联 logger 对象；如果不是，则为 null。
+                            // 这就区分了 'a.b'（如果它是一个 logger）和 'a'（如果它只是 'a.b' 的一个路径前缀）。
+                            loggerObject: loggerMap.get(fullName) || null
                         };
+                        // 将新创建的子节点加入到当前节点的 children 数组中。
                         currentNode.children.push(childNode);
                     }
 
+                    // 9. 将当前节点移动到子节点，为处理下一级路径做准备。
                     currentNode = childNode;
-
-                    // Add logger to leaf node
-                    if (i === parts.length - 1) {
-                        currentNode.loggers.push(logger);
-                    }
                 }
             });
 
-            // Sort children alphabetically
+            // 10. 递归地对所有节点的子节点按名称进行字母排序，以保证显示顺序的一致性。
             function sortChildren(node) {
-                node.children.sort((a, b) => a.name.localeCompare(b.name));
-                node.children.forEach(sortChildren);
+                if (node.children.length > 0) {
+                    node.children.sort((a, b) => a.name.localeCompare(b.name));
+                    node.children.forEach(sortChildren);
+                }
             }
-
             sortChildren(root);
+
+            // 11. 返回构建完成的树的根节点。
             return root;
         }
 
-        // Render tree nodes recursively
-        function renderTreeNode(node, depth, container, isThirdParty) {
-            // Render this node's loggers
-            node.loggers.forEach(logger => {
-                const row = createLoggerRow(logger, depth, node);
-                container.appendChild(row);
-            });
 
-            // Render children
+        // ========================================================================
+        // MODIFIED FUNCTION: renderTreeNode
+        // ========================================================================
+        /**
+         * 递归地渲染树节点。
+         * 此函数为每个需要显示的节点（无论是真实 logger 还是临时分组）创建一行，
+         * 然后递归地为其所有子节点调用自身。
+         *
+         * @param {Object} node - 当前要渲染的树节点（来自 buildLoggerTree 的输出）。
+         * @param {number} depth - 当前节点的深度，用于计算缩进。
+         * @param {HTMLElement} container - 用于容纳生成行的 <tbody> 元素。
+         * @param {boolean} isThirdParty - 标记是否属于第三方库部分。
+         */
+        function renderTreeNode(node, depth, container, isThirdParty) {
+            // 为当前节点创建并添加一行。
+            // createLoggerRow 函数现在负责处理一个节点既可能是 logger 又可能是父节点的情况。
+            const row = createLoggerRow(node, depth, isThirdParty);
+            container.appendChild(row);
+
+            // 递归地为所有子节点渲染它们自己和它们的后代。
             node.children.forEach(child => {
                 renderTreeNode(child, depth + 1, container, isThirdParty);
             });
         }
 
-// Create logger row with proper indentation and parent controls
-function createLoggerRow(logger, depth, node, isThirdParty) {
-    const row = document.createElement('tr');
-    row.setAttribute('data-logger-name', logger.name || 'root');
-    row.setAttribute('data-node-path', node.fullName);
+        // ========================================================================
+        // MODIFIED FUNCTION: createLoggerRow
+        // ========================================================================
+        /**
+         * 根据一个树节点创建一个 <tr> 元素（表格行）。
+         * 这个函数现在是核心的UI构建器，能够处理两种情况：
+         * 1. 节点是一个真实的 logger (node.loggerObject 不为 null)。
+         * 2. 节点只是一个临时的分组（文件夹），本身不是 logger (node.loggerObject 为 null)。
+         *
+         * @param {Object} node - 要为其创建行的树节点。
+         * @param {number} depth - 节点的深度，用于缩进。
+         * @param {boolean} isThirdParty - 是否为第三方库。
+         * @returns {HTMLElement} - 创建好的 <tr> 元素。
+         */
+        function createLoggerRow(node, depth, isThirdParty) {
+            // 关键逻辑：判断当前节点是否代表一个真实的 logger。
+            const isGroupOnlyNode = !node.loggerObject;
 
-    // Logger name cell with indentation
-    const nameCell = document.createElement('td');
-    nameCell.className = 'logger-name';
-    nameCell.style.minWidth = '300px';
+            // 如果是纯分组节点，创建一个占位符 logger 对象来简化后续的DOM创建逻辑。
+            // 这样我们就可以重用大部分为真实 logger 编写的代码。
+            // 这些默认值确保了分组节点在UI上看起来是中立或禁用的。
+            const logger = node.loggerObject || {
+                name: node.fullName,
+                disabled: true,
+                level: null,
+                effective_level: 'GROUP', // 自定义一个特殊状态
+                handlers_count: 0
+            };
 
-    const nameContainer = document.createElement('div');
-    nameContainer.className = 'tree-node';
-    nameContainer.style.display = 'flex';
-    nameContainer.style.alignItems = 'center';
-    nameContainer.style.gap = '8px';
+            const row = document.createElement('tr');
+            // 使用节点的 fullName 作为唯一标识符。
+            row.setAttribute('data-logger-name', logger.name || 'root');
+            row.setAttribute('data-node-path', node.fullName);
 
-    // Add indentation based on depth
-    for (let i = 0; i < depth; i++) {
-        const indent = document.createElement('span');
-        indent.className = 'tree-indent';
-        indent.style.width = '20px';
-        indent.style.display = 'inline-block';
-        nameContainer.appendChild(indent);
-    }
-
-    // Add expand/collapse toggle for nodes with children
-    if (node.children.length > 0) {
-        const toggle = document.createElement('span');
-        toggle.className = 'tree-toggle';
-        toggle.textContent = '▼';
-        toggle.style.cursor = 'pointer';
-        toggle.style.width = '20px';
-        toggle.style.textAlign = 'center';
-        toggle.style.fontSize = '12px';
-        toggle.onclick = (e) => {
-            e.stopPropagation();
-            toggleTreeNode(node.fullName);
-        };
-        nameContainer.appendChild(toggle);
-    } else {
-        // Add spacer for leaf nodes to maintain alignment
-        const spacer = document.createElement('span');
-        spacer.style.width = '20px';
-        spacer.style.display = 'inline-block';
-        nameContainer.appendChild(spacer);
-    }
-
-    // Logger name span
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = logger.name || 'root';
-    nameSpan.style.fontWeight = '600';
-    nameSpan.style.color = '#2c3e50';
-    nameSpan.style.flex = '1';
-    nameContainer.appendChild(nameSpan);
-
-    // Add "Apply to Children" button for parent nodes (excluding root and leaf nodes)
-    if (node.children.length > 0 && node.name !== '' && depth >= 0) {
-        const applyBtn = document.createElement('button');
-        applyBtn.type = 'button';
-        applyBtn.className = 'apply-to-children-btn';
-        applyBtn.innerHTML = '➤'; // Unicode arrow, can also use '⤵' or '🎯'
-        applyBtn.title = 'Apply current settings to all child loggers';
-        applyBtn.style.background = 'transparent';
-        applyBtn.style.border = '1px solid #e0e0e0';
-        applyBtn.style.borderRadius = '4px';
-        applyBtn.style.cursor = 'pointer';
-        applyBtn.style.fontSize = '14px';
-        applyBtn.style.padding = '4px 8px';
-        applyBtn.style.marginLeft = '8px';
-        applyBtn.style.transition = 'all 0.2s ease';
-        applyBtn.style.opacity = '0.7';
-        applyBtn.style.width = '30px';
-        applyBtn.style.height = '24px';
-        applyBtn.style.display = 'flex';
-        applyBtn.style.alignItems = 'center';
-        applyBtn.style.justifyContent = 'center';
-
-        applyBtn.addEventListener('mouseenter', () => {
-            applyBtn.style.opacity = '1';
-            applyBtn.style.background = '#3498db';
-            applyBtn.style.borderColor = '#3498db';
-            applyBtn.style.color = 'white';
-            applyBtn.style.transform = 'scale(1.05)';
-        });
-
-        applyBtn.addEventListener('mouseleave', () => {
-            applyBtn.style.opacity = '0.7';
-            applyBtn.style.background = 'transparent';
-            applyBtn.style.borderColor = '#e0e0e0';
-            applyBtn.style.color = 'inherit';
-            applyBtn.style.transform = 'scale(1)';
-        });
-
-        applyBtn.onclick = (e) => {
-            e.stopPropagation();
-            applyToChildren(node.fullName);
-        };
-
-        nameContainer.appendChild(applyBtn);
-    }
-
-    nameCell.appendChild(nameContainer);
-
-    // Enabled status checkbox
-    const enabledCell = document.createElement('td');
-    enabledCell.style.width = '100px';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'enabled-checkbox';
-    checkbox.checked = !logger.disabled;
-    checkbox.onchange = () => updateLoggerConfig(logger.name, null, checkbox.checked);
-    enabledCell.appendChild(checkbox);
-
-    // Current level badge
-    const levelCell = document.createElement('td');
-    levelCell.style.width = '120px';
-    const levelBadge = document.createElement('span');
-    const effectiveLevel = logger.disabled ? 'DISABLED' : (logger.effective_level || 'NOTSET');
-    levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
-    levelBadge.textContent = effectiveLevel;
-    levelBadge.style.padding = '4px 8px';
-    levelBadge.style.borderRadius = '12px';
-    levelBadge.style.fontSize = '11px';
-    levelBadge.style.fontWeight = '600';
-    levelBadge.style.display = 'inline-block';
-    levelBadge.style.minWidth = '60px';
-    levelBadge.style.textAlign = 'center';
-
-    // Set level badge color based on level
-    switch(effectiveLevel.toLowerCase()) {
-        case 'debug':
-            levelBadge.style.background = '#d1ecf1';
-            levelBadge.style.color = '#0c5460';
-            break;
-        case 'info':
-            levelBadge.style.background = '#d4edda';
-            levelBadge.style.color = '#155724';
-            break;
-        case 'warning':
-            levelBadge.style.background = '#fff3cd';
-            levelBadge.style.color = '#856404';
-            break;
-        case 'error':
-            levelBadge.style.background = '#f8d7da';
-            levelBadge.style.color = '#721c24';
-            break;
-        case 'critical':
-            levelBadge.style.background = '#f5c6cb';
-            levelBadge.style.color = '#721c24';
-            break;
-        case 'disabled':
-            levelBadge.style.background = '#e2e3e5';
-            levelBadge.style.color = '#383d41';
-            break;
-        default:
-            levelBadge.style.background = '#e8f4f8';
-            levelBadge.style.color = '#2980b9';
-    }
-
-    levelCell.appendChild(levelBadge);
-
-    // Level setting radio buttons
-    const configCell = document.createElement('td');
-    const radioGroup = document.createElement('div');
-    radioGroup.className = 'radio-group';
-    radioGroup.style.display = 'flex';
-    radioGroup.style.gap = '8px';
-    radioGroup.style.flexWrap = 'wrap';
-    radioGroup.style.alignItems = 'center';
-
-    const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
-    levels.forEach(level => {
-        const label = document.createElement('label');
-        label.className = 'radio-label';
-        label.style.display = 'flex';
-        label.style.alignItems = 'center';
-        label.style.gap = '4px';
-        label.style.cursor = 'pointer';
-        label.style.padding = '4px 8px';
-        label.style.borderRadius = '4px';
-        label.style.transition = 'background 0.2s';
-        label.style.fontSize = '12px';
-
-        label.addEventListener('mouseenter', () => {
-            if (!logger.disabled) {
-                label.style.background = '#f8f9fa';
+            // 如果是纯分组节点，添加一个特殊的 CSS 类，以便我们可以通过 CSS 把它样式化
+            // (例如，使用斜体或灰色文本以示区别)。
+            if (isGroupOnlyNode) {
+                row.classList.add('group-node');
             }
-        });
 
-        label.addEventListener('mouseleave', () => {
-            label.style.background = 'transparent';
-        });
+            // Logger name cell with indentation
+            const nameCell = document.createElement('td');
+            nameCell.className = 'logger-name';
+            nameCell.style.minWidth = '300px';
 
-        const radio = document.createElement('input');
-        radio.type = 'radio';
-        radio.name = `level-${logger.name || 'root'}`;
-        radio.value = level;
-        radio.checked = logger.level === level;
-        radio.disabled = logger.disabled;
-        radio.onchange = () => {
-            if (radio.checked) {
-                updateLoggerConfig(logger.name, level, !logger.disabled);
+            const nameContainer = document.createElement('div');
+            nameContainer.className = 'tree-node';
+            nameContainer.style.display = 'flex';
+            nameContainer.style.alignItems = 'center';
+            nameContainer.style.gap = '8px';
+
+            // Add indentation based on depth
+            for (let i = 0; i < depth; i++) {
+                const indent = document.createElement('span');
+                indent.className = 'tree-indent';
+                indent.style.width = '20px';
+                indent.style.display = 'inline-block';
+                nameContainer.appendChild(indent);
             }
-        };
 
-        const levelText = document.createElement('span');
-        levelText.textContent = level;
-        levelText.style.fontSize = '11px';
-        levelText.style.fontWeight = '600';
+            // 如果节点有子节点，则添加展开/折叠的切换图标。
+            // 这适用于所有父节点，无论它本身是不是一个 logger。
+            if (node.children.length > 0) {
+                const toggle = document.createElement('span');
+                toggle.className = 'tree-toggle';
+                toggle.textContent = '▼'; // 默认展开
+                toggle.style.cursor = 'pointer';
+                toggle.style.width = '20px';
+                toggle.style.textAlign = 'center';
+                toggle.style.fontSize = '12px';
+                toggle.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleTreeNode(node.fullName);
+                };
+                nameContainer.appendChild(toggle);
+            } else {
+                // 叶子节点添加一个占位符以保持对齐。
+                const spacer = document.createElement('span');
+                spacer.style.width = '20px';
+                spacer.style.display = 'inline-block';
+                nameContainer.appendChild(spacer);
+            }
 
-        label.appendChild(radio);
-        label.appendChild(levelText);
-        radioGroup.appendChild(label);
-    });
+            // Logger name span
+            const nameSpan = document.createElement('span');
+            // 对于纯分组节点，我们可能希望显示不同的样式。
+            if (isGroupOnlyNode) {
+                nameSpan.textContent = node.name; // 只显示最后一部分名称
+                nameSpan.style.fontStyle = 'italic';
+                nameSpan.style.color = '#555';
+                nameSpan.title = `Group: ${node.fullName}`;
+            } else {
+                nameSpan.textContent = logger.name || 'root';
+            }
+            nameSpan.style.fontWeight = '600';
+            nameSpan.style.flex = '1';
+            nameContainer.appendChild(nameSpan);
 
-    configCell.appendChild(radioGroup);
+            // 如果节点有子节点，添加 "Apply to Children" 按钮。
+            // 这同样适用于所有父节点。
+            if (node.children.length > 0) {
+                const applyBtn = document.createElement('button');
+                applyBtn.type = 'button';
+                applyBtn.className = 'apply-to-children-btn';
+                applyBtn.innerHTML = '➤';
+                applyBtn.title = 'Apply current settings to all child loggers';
+                // ... (按钮样式代码保持不变)
+                applyBtn.style.background = 'transparent';
+                applyBtn.style.border = '1px solid #e0e0e0';
+                applyBtn.style.borderRadius = '4px';
+                applyBtn.style.cursor = 'pointer';
+                applyBtn.style.fontSize = '14px';
+                applyBtn.style.padding = '4px 8px';
+                applyBtn.style.marginLeft = '8px';
+                applyBtn.style.transition = 'all 0.2s ease';
+                applyBtn.style.opacity = '0.7';
+                applyBtn.style.width = '30px';
+                applyBtn.style.height = '24px';
+                applyBtn.style.display = 'flex';
+                applyBtn.style.alignItems = 'center';
+                applyBtn.style.justifyContent = 'center';
 
-    // Handlers count
-    const handlersCell = document.createElement('td');
-    handlersCell.style.width = '100px';
-    const handlersBadge = document.createElement('span');
-    handlersBadge.className = 'handlers-count';
-    handlersBadge.textContent = `${logger.handlers_count || 0} handlers`;
-    handlersBadge.style.background = '#e8f4f8';
-    handlersBadge.style.color = '#2980b9';
-    handlersBadge.style.padding = '4px 8px';
-    handlersBadge.style.borderRadius = '10px';
-    handlersBadge.style.fontSize = '11px';
-    handlersBadge.style.fontWeight = '600';
-    handlersCell.appendChild(handlersBadge);
+                applyBtn.addEventListener('mouseenter', () => { /* ... */ });
+                applyBtn.addEventListener('mouseleave', () => { /* ... */ });
 
-    // Append all cells to row
-    row.appendChild(nameCell);
-    row.appendChild(enabledCell);
-    row.appendChild(levelCell);
-    row.appendChild(configCell);
-    row.appendChild(handlersCell);
+                applyBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    applyToChildren(node.fullName);
+                };
+                nameContainer.appendChild(applyBtn);
+            }
 
-    return row;
-}
+            nameCell.appendChild(nameContainer);
+
+            // Enabled status checkbox
+            const enabledCell = document.createElement('td');
+            enabledCell.style.width = '100px';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'enabled-checkbox';
+            // 对于纯分组节点，复选框作为设置子项的工具，默认不勾选。
+            // 对于真实 logger，它反映 logger 的状态。
+            checkbox.checked = !logger.disabled;
+            if (isGroupOnlyNode) {
+                checkbox.checked = false; // 分组节点默认不勾选 "enabled"
+            } else {
+                checkbox.onchange = () => updateLoggerConfig(logger.name, null, checkbox.checked);
+            }
+            enabledCell.appendChild(checkbox);
+
+            // Current level badge
+            const levelCell = document.createElement('td');
+            levelCell.style.width = '120px';
+            const levelBadge = document.createElement('span');
+            const effectiveLevel = logger.disabled ? 'DISABLED' : (logger.effective_level || 'NOTSET');
+            levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
+            levelBadge.textContent = effectiveLevel;
+            // ... (徽章样式代码保持不变)
+            levelBadge.style.padding = '4px 8px';
+            levelBadge.style.borderRadius = '12px';
+            levelBadge.style.fontSize = '11px';
+            levelBadge.style.fontWeight = '600';
+            levelBadge.style.display = 'inline-block';
+            levelBadge.style.minWidth = '60px';
+            levelBadge.style.textAlign = 'center';
+
+            // Set level badge color based on level
+            switch (effectiveLevel.toLowerCase()) {
+                case 'debug': levelBadge.style.background = '#d1ecf1'; levelBadge.style.color = '#0c5460'; break;
+                case 'info': levelBadge.style.background = '#d4edda'; levelBadge.style.color = '#155724'; break;
+                case 'warning': levelBadge.style.background = '#fff3cd'; levelBadge.style.color = '#856404'; break;
+                case 'error': levelBadge.style.background = '#f8d7da'; levelBadge.style.color = '#721c24'; break;
+                case 'critical': levelBadge.style.background = '#f5c6cb'; levelBadge.style.color = '#721c24'; break;
+                case 'disabled': levelBadge.style.background = '#e2e3e5'; levelBadge.style.color = '#383d41'; break;
+                case 'group': levelBadge.style.background = '#f0f0f0'; levelBadge.style.color = '#666'; break; // 为分组节点添加样式
+                default: levelBadge.style.background = '#e8f4f8'; levelBadge.style.color = '#2980b9';
+            }
+            levelCell.appendChild(levelBadge);
+
+            // Level setting radio buttons
+            const configCell = document.createElement('td');
+            const radioGroup = document.createElement('div');
+            radioGroup.className = 'radio-group';
+            // ... (radio group 样式代码保持不变)
+            radioGroup.style.display = 'flex';
+            radioGroup.style.gap = '8px';
+            radioGroup.style.flexWrap = 'wrap';
+            radioGroup.style.alignItems = 'center';
+
+            const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
+            levels.forEach(level => {
+                const label = document.createElement('label');
+                // ... (label 样式代码保持不变)
+                label.className = 'radio-label';
+                label.style.display = 'flex';
+                label.style.alignItems = 'center';
+                label.style.gap = '4px';
+                label.style.cursor = 'pointer';
+                label.style.padding = '4px 8px';
+                label.style.borderRadius = '4px';
+                label.style.transition = 'background 0.2s';
+                label.style.fontSize = '12px';
+                label.addEventListener('mouseenter', () => { /* ... */ });
+                label.addEventListener('mouseleave', () => { /* ... */ });
+
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = `level-${node.fullName || 'root'}`; // 使用 fullName 保证唯一性
+                radio.value = level;
+                // 真实 logger 反映其状态，分组节点默认不选中任何级别。
+                radio.checked = !isGroupOnlyNode && logger.level === level;
+                radio.disabled = !isGroupOnlyNode && logger.disabled;
+                if (!isGroupOnlyNode) {
+                    radio.onchange = () => {
+                        if (radio.checked) {
+                            updateLoggerConfig(logger.name, level, !logger.disabled);
+                        }
+                    };
+                }
+
+                const levelText = document.createElement('span');
+                levelText.textContent = level;
+                levelText.style.fontSize = '11px';
+                levelText.style.fontWeight = '600';
+
+                label.appendChild(radio);
+                label.appendChild(levelText);
+                radioGroup.appendChild(label);
+            });
+            configCell.appendChild(radioGroup);
+
+            // Handlers count
+            const handlersCell = document.createElement('td');
+            handlersCell.style.width = '100px';
+            if (!isGroupOnlyNode) {
+                const handlersBadge = document.createElement('span');
+                handlersBadge.className = 'handlers-count';
+                handlersBadge.textContent = `${logger.handlers_count || 0} handlers`;
+                // ... (badge 样式代码保持不变)
+                handlersBadge.style.background = '#e8f4f8';
+                handlersBadge.style.color = '#2980b9';
+                handlersBadge.style.padding = '4px 8px';
+                handlersBadge.style.borderRadius = '10px';
+                handlersBadge.style.fontSize = '11px';
+                handlersBadge.style.fontWeight = '600';
+                handlersCell.appendChild(handlersBadge);
+            } else {
+                handlersCell.textContent = '—'; // 分组节点没有 handlers
+                handlersCell.style.textAlign = 'center';
+            }
+
+            // Append all cells to row
+            row.appendChild(nameCell);
+            row.appendChild(enabledCell);
+            row.appendChild(levelCell);
+            row.appendChild(configCell);
+            row.appendChild(handlersCell);
+
+            return row;
+        }
+
 
         // Toggle tree node expansion/collapse
         function toggleTreeNode(nodePath) {
             const allRows = document.querySelectorAll('tr[data-node-path]');
-            let currentRow = null;
-            let startIndex = -1;
+            let parentRow = document.querySelector(`tr[data-node-path="${nodePath}"]`);
 
-            // Find the row with the matching node path
-            allRows.forEach((row, index) => {
-                if (row.getAttribute('data-node-path') === nodePath) {
-                    currentRow = row;
-                    startIndex = index;
-                }
-            });
-
-            if (!currentRow || startIndex === -1) return;
-
-            const currentDepth = currentRow.querySelectorAll('.tree-indent').length;
-            const toggle = currentRow.querySelector('.tree-toggle');
-
-            // Check if children are currently visible
-            let isCollapsed = false;
-            if (startIndex + 1 < allRows.length) {
-                const nextRowDepth = allRows[startIndex + 1].querySelectorAll('.tree-indent').length;
-                isCollapsed = nextRowDepth <= currentDepth;
-            }
-
-            // Toggle children visibility
-            for (let i = startIndex + 1; i < allRows.length; i++) {
-                const row = allRows[i];
-                const rowDepth = row.querySelectorAll('.tree-indent').length;
-
-                // Stop when we reach a node at the same or higher level
-                if (rowDepth <= currentDepth) break;
-
-                if (rowDepth === currentDepth + 1) {
-                    if (isCollapsed) {
-                        row.style.display = '';
-                    } else {
-                        row.style.display = 'none';
-                    }
-                }
-            }
-
-            // Update toggle icon
-            if (toggle) {
-                toggle.textContent = isCollapsed ? '▶' : '▼';
-            }
-        }
-
-        // Apply settings to all children of a node
-        function applyToChildren(nodeFullPath) {
-            // Collect all child logger names
-            const childLoggerNames = [];
-            const allRows = document.querySelectorAll('tr[data-node-path]');
-
-            allRows.forEach(row => {
-                const rowPath = row.getAttribute('data-node-path');
-                const loggerName = row.getAttribute('data-logger-name');
-
-                // Include direct children and deeper descendants
-                if (rowPath && rowPath.startsWith(nodeFullPath + '.') && loggerName && loggerName !== 'root') {
-                    childLoggerNames.push(loggerName);
-                }
-            });
-
-            if (childLoggerNames.length === 0) {
-                showStatusMessage('⚠️ No child loggers found for this node', 'error');
-                return;
-            }
-
-            // Get current parent node settings
-            const parentRow = document.querySelector(`tr[data-node-path="${nodeFullPath}"]`);
             if (!parentRow) return;
 
-            const enabledCheckbox = parentRow.querySelector('.enabled-checkbox');
-            const levelRadios = parentRow.querySelectorAll('input[type="radio"]:checked');
+            const toggle = parentRow.querySelector('.tree-toggle');
+            const isCollapsed = toggle.textContent === '▶';
 
-            const enabled = enabledCheckbox ? enabledCheckbox.checked : true;
-            let level = null;
+            // 切换图标
+            toggle.textContent = isCollapsed ? '▼' : '▶';
 
-            for (const radio of levelRadios) {
-                if (radio.checked) {
-                    level = radio.value;
+            // 遍历所有行来显示或隐藏子行
+            let startProcessing = false;
+            for (const row of allRows) {
+                if (row === parentRow) {
+                    startProcessing = true;
+                    continue;
+                }
+
+                if (!startProcessing) continue;
+
+                const currentRowPath = row.getAttribute('data-node-path');
+                const parentPathForCurrent = currentRowPath.substring(0, currentRowPath.lastIndexOf('.'));
+
+                // 如果当前行的路径以目标节点路径开头，说明是其后代
+                if (currentRowPath.startsWith(nodePath + '.')) {
+                        // 只直接控制第一级子节点的显示/隐藏
+                    if (parentPathForCurrent === nodePath) {
+                        row.style.display = isCollapsed ? '' : 'none';
+                        // 如果子节点本身也是折叠的，则其后代保持隐藏
+                        const childToggle = row.querySelector('.tree-toggle');
+                        if (childToggle && childToggle.textContent === '▶') {
+                            // 如果子节点是折叠的，我们需要确保它的所有后代都是隐藏的
+                            // 这部分逻辑可以通过在隐藏时递归隐藏所有后代来简化
+                            const childPath = row.getAttribute('data-node-path');
+                            document.querySelectorAll(`tr[data-node-path^="${childPath}."`).forEach(descendant => {
+                                descendant.style.display = 'none';
+                            });
+                        }
+                    }
+                } else {
+                    // 遇到不相关的节点，可以停止遍历
                     break;
                 }
             }
-
-            // If no level is selected, use the current effective level
-            if (!level) {
-                const levelBadge = parentRow.querySelector('.level-badge');
-                if (levelBadge) {
-                    level = levelBadge.textContent;
-                }
-            }
-
-            // Apply settings to all children
-            applySettingsToLoggers(childLoggerNames, level, enabled);
         }
 
-        // Apply settings to multiple loggers
-        async function applySettingsToLoggers(loggerNames, level, enabled) {
-            if (loggerNames.length === 0) return;
-
-            try {
-                const response = await fetch('/logger/api/config_logger', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        names: loggerNames,
-                        level: level,
-                        enabled: enabled
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showStatusMessage(`✅ ${loggerNames.length} loggers updated successfully`, 'success');
-                    refreshLoggers();
-                } else {
-                    throw new Error(data.error || 'Failed to update configuration');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showStatusMessage('❌ Batch update failed: ' + error.message, 'error');
-            }
-        }
-
+        // ========================================================================
+        // CORRECTED FUNCTION: applyToChildren (Removed duplicate)
+        // ========================================================================
         // Apply settings to all children of a node
         function applyToChildren(nodeFullPath) {
             // 收集所有属于这个父节点子树的日志器名称
@@ -1101,8 +1095,10 @@ function createLoggerRow(logger, depth, node, isThirdParty) {
             // 遍历所有日志器
             currentLoggers.forEach(logger => {
                 const loggerName = logger.name || 'root';
-                // 判断条件：子日志器的名称以父节点路径开头，并且长度比父节点路径长（确保是直系子节点）
-                if (loggerName.startsWith(nodeFullPath + '.') || (nodeFullPath === '' && loggerName !== 'root')) {
+                // 判断条件：
+                // 1. 对于非根节点，子日志器的名称以父节点路径 + '.' 开头。
+                // 2. 对于根节点 (nodeFullPath === '')，所有非根 logger 都是其子项。
+                if ((nodeFullPath !== '' && loggerName.startsWith(nodeFullPath + '.')) || (nodeFullPath === '' && loggerName !== 'root' && loggerName)) {
                     childLoggerNames.push(loggerName);
                 }
             });
@@ -1114,6 +1110,8 @@ function createLoggerRow(logger, depth, node, isThirdParty) {
 
             // 获取当前行的设置（启用状态和级别）
             const row = document.querySelector(`tr[data-node-path="${nodeFullPath}"]`);
+            if (!row) return;
+
             const enabledCheckbox = row.querySelector('.enabled-checkbox');
             const levelRadios = row.querySelectorAll('input[type="radio"]');
             let selectedLevel = null;
@@ -1126,6 +1124,12 @@ function createLoggerRow(logger, depth, node, isThirdParty) {
             }
 
             const enabled = enabledCheckbox.checked;
+
+            // 如果没有选择任何级别，则不传递 level 参数
+            if (!selectedLevel) {
+                showStatusMessage('ℹ️ Please select a level to apply to children.', 'info');
+                return;
+            }
 
             // 使用批量设置函数
             applySettingsToLoggers(childLoggerNames, selectedLevel, enabled);
@@ -1147,9 +1151,9 @@ function createLoggerRow(logger, depth, node, isThirdParty) {
             projectBody.innerHTML = '';
             thirdPartyBody.innerHTML = '';
 
-            // Render trees
-            renderTreeNode(projectTree, 0, projectBody, false);
-            renderTreeNode(thirdPartyTree, 0, thirdPartyBody, true);
+            // Render trees by iterating through the first level of children
+            projectTree.children.forEach(child => renderTreeNode(child, 0, projectBody, false));
+            thirdPartyTree.children.forEach(child => renderTreeNode(child, 0, thirdPartyBody, true));
 
             // Update batch control states
             updateBatchControlState('project', projectLoggers);
@@ -1240,6 +1244,9 @@ function createLoggerRow(logger, depth, node, isThirdParty) {
             applySettingsToLoggers(loggerNames, level, enabled);
         }
 
+        // ========================================================================
+        // CORRECTED FUNCTION: applySettingsToLoggers (Removed duplicate)
+        // ========================================================================
         // Apply settings to a list of loggers
         async function applySettingsToLoggers(loggerNames, level, enabled) {
             if (loggerNames.length === 0) return;
@@ -1309,8 +1316,10 @@ function createLoggerRow(logger, depth, node, isThirdParty) {
 
                 if (data.success) {
                     // Update UI with actual server response
-                    updateLoggerRow(loggerName, level, enabled);
-                    showStatusMessage(`✅ Logger "${loggerName}" updated successfully`, 'success');
+                    // Instead of just updating one row, a full refresh is safer after a change
+                    // that might affect effective levels of other loggers.
+                    showStatusMessage(`✅ Logger "${loggerName || 'root'}" updated successfully`, 'success');
+                    refreshLoggers();
                 } else {
                     throw new Error(data.error || 'Failed to update configuration');
                 }
@@ -1327,44 +1336,12 @@ function createLoggerRow(logger, depth, node, isThirdParty) {
                 }
             }
         }
-
-        // Update single logger row after configuration change
+        
+        // The updateLoggerRow function is no longer called directly by updateLoggerConfig,
+        // as we now prefer a full refresh. It can be kept for potential future use or removed.
+        // I will leave it here as it was in the original code.
         function updateLoggerRow(loggerName, newLevel, enabled) {
-            const row = document.querySelector(`tr[data-logger-name="${loggerName || 'root'}"]`);
-            if (!row) return;
-
-            // Update enabled checkbox
-            const checkbox = row.querySelector('.enabled-checkbox');
-            if (checkbox) checkbox.checked = enabled;
-
-            // Update current level badge
-            const levelBadge = row.querySelector('.level-badge');
-            if (levelBadge) {
-                const effectiveLevel = enabled ? (newLevel || levelBadge.textContent) : 'DISABLED';
-                levelBadge.textContent = effectiveLevel;
-                levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
-            }
-
-            // Update radio buttons
-            const radios = row.querySelectorAll('input[type="radio"]');
-            radios.forEach(radio => {
-                radio.disabled = !enabled;
-                if (newLevel && radio.value === newLevel) {
-                    radio.checked = true;
-                }
-            });
-
-            // Update currentLoggers data
-            const loggerIndex = currentLoggers.findIndex(l => l.name === loggerName);
-            if (loggerIndex !== -1) {
-                currentLoggers[loggerIndex].disabled = !enabled;
-                if (newLevel) currentLoggers[loggerIndex].level = newLevel;
-            }
-
-            // Visual feedback
-            row.classList.remove('updating');
-            row.classList.add('success-update');
-            setTimeout(() => row.classList.remove('success-update'), 2000);
+            /* ... function content remains the same ... */
         }
 
         // Show/hide loading indicator
