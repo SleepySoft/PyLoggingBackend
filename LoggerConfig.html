@@ -722,28 +722,17 @@
         return root;
         }
 
-        // Render tree nodes recursively
-        function renderTreeNode(node, depth, container, isThirdParty) {
-            // Render this node's loggers
-            node.loggers.forEach(logger => {
-                const row = createLoggerRow(logger, depth, node);
-                container.appendChild(row);
-            });
+        function renderNodeRow(node, depth, container, isThirdParty) {
+        // 如果当前节点没有 logger 也没有孩子，就不需要渲染
+        if (node.loggers.length === 0 && node.children.length === 0) return;
 
-            // Render children
-            node.children.forEach(child => {
-                renderTreeNode(child, depth + 1, container, isThirdParty);
-            });
-        }
+        // 1. 先渲染节点行（可折叠）
+        if (node.name !== '') {          // 根节点 name 为空，跳过
+            const nodeRow = document.createElement('tr');
+            // 用 fullName 做唯一 key
+            nodeRow.setAttribute('data-node-path', node.fullName);
+            nodeRow.setAttribute('data-collapsed', 'false');   // 默认展开
 
-        // Create logger row with proper indentation and parent controls
-        function createLoggerRow(logger, depth, node) {
-            const row = document.createElement('tr');
-            row.setAttribute('data-logger-name', logger.name || 'root');
-            row.setAttribute('data-node-path', node.fullName);
-            row.setAttribute('data-collapsed', 'false'); // Initialize collapsed state
-
-            // Logger name cell with indentation
             const nameCell = document.createElement('td');
             nameCell.className = 'logger-name';
             nameCell.style.minWidth = '300px';
@@ -754,7 +743,79 @@
             nameContainer.style.alignItems = 'center';
             nameContainer.style.gap = '8px';
 
-            // Add indentation based on depth
+            // 缩进
+            for (let i = 0; i < depth; i++) {
+            const indent = document.createElement('span');
+            indent.className = 'tree-indent';
+            indent.style.width = '20px';
+            indent.style.display = 'inline-block';
+            nameContainer.appendChild(indent);
+            }
+
+            // 折叠按钮
+            const toggle = document.createElement('span');
+            toggle.className = 'tree-toggle';
+            toggle.textContent = '▼';
+            toggle.style.cursor = 'pointer';
+            toggle.style.width = '20px';
+            toggle.style.textAlign = 'center';
+            toggle.style.fontSize = '12px';
+            toggle.onclick = (e) => {
+            e.stopPropagation();
+            toggleTreeNode(node.fullName);
+            };
+            nameContainer.appendChild(toggle);
+
+            // 节点名
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = node.name;
+            nameSpan.style.fontWeight = '600';
+            nameSpan.style.color = '#2c3e50';
+            nameSpan.style.flex = '1';
+            nameContainer.appendChild(nameSpan);
+
+            nameCell.appendChild(nameContainer);
+            nodeRow.appendChild(nameCell);
+
+            // 空单元格占位
+            ['', '', '', ''].forEach(() => nodeRow.appendChild(document.createElement('td')));
+            container.appendChild(nodeRow);
+        }
+
+        // 2. 再渲染该节点下的 logger（叶子）
+        node.loggers.forEach(logger => {
+            const row = createLoggerRow(logger, node.name === '' ? 0 : depth + 1); // 叶子再缩进一级
+            container.appendChild(row);
+        });
+
+        // 3. 递归渲染孩子节点
+        node.children.forEach(child =>
+            renderNodeRow(child, (node.name === '' ? 0 : depth + 1), container, isThirdParty)
+        );
+        }
+
+        // 修改：把原来的 renderTreeNode 改名/替换为上面这个
+        function renderTreeNode(node, depth, container, isThirdParty) {
+        renderNodeRow(node, depth, container, isThirdParty);
+        }
+
+        // Create logger row with proper indentation and parent controls
+        function createLoggerRow(logger, depth) {
+            const row = document.createElement('tr');
+            row.setAttribute('data-logger-name', logger.name || 'root');
+            // 不再写 data-node-path，让 logger 行不参与折叠
+
+            const nameCell = document.createElement('td');
+            nameCell.className = 'logger-name';
+            nameCell.style.minWidth = '300px';
+
+            const nameContainer = document.createElement('div');
+            nameContainer.className = 'tree-node';
+            nameContainer.style.display = 'flex';
+            nameContainer.style.alignItems = 'center';
+            nameContainer.style.gap = '8px';
+
+            // 缩进
             for (let i = 0; i < depth; i++) {
                 const indent = document.createElement('span');
                 indent.className = 'tree-indent';
@@ -763,29 +824,13 @@
                 nameContainer.appendChild(indent);
             }
 
-            // Add expand/collapse toggle for nodes with children
-            if (node.children.length > 0) {
-                const toggle = document.createElement('span');
-                toggle.className = 'tree-toggle';
-                toggle.textContent = '▼';
-                toggle.style.cursor = 'pointer';
-                toggle.style.width = '20px';
-                toggle.style.textAlign = 'center';
-                toggle.style.fontSize = '12px';
-                toggle.onclick = (e) => {
-                    e.stopPropagation();
-                    toggleTreeNode(node.fullName);
-                };
-                nameContainer.appendChild(toggle);
-            } else {
-                // Add spacer for leaf nodes to maintain alignment
-                const spacer = document.createElement('span');
-                spacer.style.width = '20px';
-                spacer.style.display = 'inline-block';
-                nameContainer.appendChild(spacer);
-            }
+            // 叶子 logger 不需要折叠按钮，用空白占位
+            const spacer = document.createElement('span');
+            spacer.style.width = '20px';
+            spacer.style.display = 'inline-block';
+            nameContainer.appendChild(spacer);
 
-            // Logger name span
+            // logger 名
             const nameSpan = document.createElement('span');
             nameSpan.textContent = logger.name || 'root';
             nameSpan.style.fontWeight = '600';
@@ -793,53 +838,7 @@
             nameSpan.style.flex = '1';
             nameContainer.appendChild(nameSpan);
 
-            // Add "Apply to Children" button for parent nodes
-            if (node.children.length > 0 && node.name !== '') {
-                const applyBtn = document.createElement('button');
-                applyBtn.type = 'button';
-                applyBtn.className = 'apply-to-children-btn';
-                applyBtn.innerHTML = '➤'; // Unicode arrow
-                applyBtn.title = 'Apply current settings to all child loggers';
-                applyBtn.style.background = 'transparent';
-                applyBtn.style.border = '1px solid #e0e0e0';
-                applyBtn.style.borderRadius = '4px';
-                applyBtn.style.cursor = 'pointer';
-                applyBtn.style.fontSize = '14px';
-                applyBtn.style.padding = '4px 8px';
-                applyBtn.style.marginLeft = '8px';
-                applyBtn.style.transition = 'all 0.2s ease';
-                applyBtn.style.opacity = '0.7';
-                applyBtn.style.width = '30px';
-                applyBtn.style.height = '24px';
-                applyBtn.style.display = 'flex';
-                applyBtn.style.alignItems = 'center';
-                applyBtn.style.justifyContent = 'center';
-
-                applyBtn.addEventListener('mouseenter', () => {
-                    applyBtn.style.opacity = '1';
-                    applyBtn.style.background = '#3498db';
-                    applyBtn.style.borderColor = '#3498db';
-                    applyBtn.style.color = 'white';
-                    applyBtn.style.transform = 'scale(1.05)';
-                });
-
-                applyBtn.addEventListener('mouseleave', () => {
-                    applyBtn.style.opacity = '0.7';
-                    applyBtn.style.background = 'transparent';
-                    applyBtn.style.borderColor = '#e0e0e0';
-                    applyBtn.style.color = 'inherit';
-                    applyBtn.style.transform = 'scale(1)';
-                });
-
-                applyBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    applyToChildren(node.fullName);
-                };
-
-                nameContainer.appendChild(applyBtn);
-            }
-
-            nameCell.appendChild(nameContainer);
+  nameCell.appendChild(nameContainer);
 
             // Enabled status checkbox
             const enabledCell = document.createElement('td');
