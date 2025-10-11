@@ -899,6 +899,7 @@
                 applyBtn.addEventListener('mouseleave', () => { /* ... */ });
 
                 applyBtn.onclick = (e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     applyToChildren(node.fullName);
                 };
@@ -1248,6 +1249,8 @@
         async function applySettingsToLoggers(loggerNames, level, enabled) {
             if (loggerNames.length === 0) return;
 
+            console.log('applySettingsToLoggers called with:', { loggerNames, level, enabled });
+
             showLoading(true);
             
             try {
@@ -1295,10 +1298,22 @@
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
                 const data = await response.json();
+                console.log('<<< received', data);
 
                 if (data.success) {
-                    // ✅ 局部更新代替全页面刷新
-                    await updateSingleLoggerRow(loggerName, data.updatedLogger || data.loggers);
+                    const current = currentLoggers.find(l => l.name === (loggerName || 'root'));
+                    const updated = {
+                        ...current,
+                        level: level ?? current.level,
+                        disabled: !enabled,          // 注意语义转换
+                        effective_level: level ?? current.effective_level
+                    };
+                    await updateSingleLoggerRow(loggerName, updated);
+
+                    // 同时把最新数据写回 currentLoggers，保证批量/搜索都用同一份
+                    const idx = currentLoggers.findIndex(l => l.name === (loggerName || 'root'));
+                    if (idx !== -1) currentLoggers[idx] = updated;
+
                     showStatusMessage(`✅ Logger "${loggerName || 'root'}" updated`, 'success');
                 } else {
                     throw new Error(data.error || 'Update failed');
@@ -1315,6 +1330,10 @@
         }
 
         async function updateSingleLoggerRow(loggerName, updatedData) {
+            if (!updatedData) {
+                console.warn('updateSingleLoggerRow: updatedData is empty, skipping UI update');
+                return;
+            }
             // 更新currentLoggers中的数据
             const loggerIndex = currentLoggers.findIndex(l => l.name === loggerName);
             if (loggerIndex !== -1 && updatedData) {
@@ -1347,6 +1366,14 @@
             });
 
             row.classList.remove('updating');
+        }
+        
+        async function updateMultipleLoggerRows(updatedLoggers) {
+            if (!Array.isArray(updatedLoggers)) return;
+            updatedLoggers.forEach(logger => {
+                // 复用你写好的单条更新
+                updateSingleLoggerRow(logger.name || 'root', logger);
+            });
         }
 
         // Show/hide loading indicator
