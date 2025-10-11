@@ -139,14 +139,13 @@
         }
 
         .level-badge {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
             font-weight: 600;
             display: inline-block;
-            min-width: 70px;
+            min-width: 60px;
             text-align: center;
-            transition: all 0.3s ease;
         }
 
         .level-debug { background: #d1ecf1; color: #0c5460; }
@@ -165,11 +164,12 @@
         .radio-label {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             cursor: pointer;
-            padding: 5px 10px;
-            border-radius: 5px;
-            transition: background 0.3s;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+            font-size: 12px;
         }
 
         .radio-label:hover {
@@ -1244,84 +1244,64 @@
             applySettingsToLoggers(loggerNames, level, enabled);
         }
 
-        // ========================================================================
-        // CORRECTED FUNCTION: applySettingsToLoggers (Removed duplicate)
-        // ========================================================================
-        // Apply settings to a list of loggers
+        // 修改 applySettingsToLoggers 函数
         async function applySettingsToLoggers(loggerNames, level, enabled) {
             if (loggerNames.length === 0) return;
 
+            showLoading(true);
+            
             try {
-                // Send request to backend API
-                const response = await fetch('/logger/api/config_logger', {
+                const response = await fetch('/logger/api/config_loggers', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        names: loggerNames,
-                        level: level,
-                        enabled: enabled
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ names: loggerNames, level, enabled })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
                 const data = await response.json();
-
+                
                 if (data.success) {
+                    // ✅ 局部更新所有影响的logger
+                    await updateMultipleLoggerRows(data.updatedLoggers || data.loggers);
                     showStatusMessage(`✅ ${loggerNames.length} loggers updated`, 'success');
-                    refreshLoggers();
                 } else {
-                    throw new Error(data.error || 'Failed to update configuration');
+                    throw new Error(data.error || 'Batch update failed');
                 }
             } catch (error) {
                 console.error('Error:', error);
                 showStatusMessage('❌ Batch update failed: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
             }
         }
 
-        // Update logger configuration
         async function updateLoggerConfig(loggerName, level, enabled) {
             const row = document.querySelector(`tr[data-logger-name="${loggerName || 'root'}"]`);
             if (row) row.classList.add('updating');
 
             try {
-                // Use current level if not specified
                 if (!level) {
                     const currentLogger = currentLoggers.find(l => l.name === loggerName);
                     if (currentLogger) level = currentLogger.level;
                 }
 
-                // Send request to backend API
-                const response = await fetch('/logger/api/config_logger', {
+                const response = await fetch('/logger/api/config_loggers', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        name: loggerName,
-                        level: level,
-                        enabled: enabled
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: loggerName, level, enabled })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
                 const data = await response.json();
 
                 if (data.success) {
-                    // Update UI with actual server response
-                    // Instead of just updating one row, a full refresh is safer after a change
-                    // that might affect effective levels of other loggers.
-                    showStatusMessage(`✅ Logger "${loggerName || 'root'}" updated successfully`, 'success');
-                    refreshLoggers();
+                    // ✅ 局部更新代替全页面刷新
+                    await updateSingleLoggerRow(loggerName, data.updatedLogger || data.loggers);
+                    showStatusMessage(`✅ Logger "${loggerName || 'root'}" updated`, 'success');
                 } else {
-                    throw new Error(data.error || 'Failed to update configuration');
+                    throw new Error(data.error || 'Update failed');
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -1330,18 +1310,43 @@
                     row.classList.remove('updating');
                     row.classList.add('error-update');
                     setTimeout(() => row.classList.remove('error-update'), 2000);
-
-                    // Revert to previous state on error
-                    refreshLoggers();
                 }
             }
         }
-        
-        // The updateLoggerRow function is no longer called directly by updateLoggerConfig,
-        // as we now prefer a full refresh. It can be kept for potential future use or removed.
-        // I will leave it here as it was in the original code.
-        function updateLoggerRow(loggerName, newLevel, enabled) {
-            /* ... function content remains the same ... */
+
+        async function updateSingleLoggerRow(loggerName, updatedData) {
+            // 更新currentLoggers中的数据
+            const loggerIndex = currentLoggers.findIndex(l => l.name === loggerName);
+            if (loggerIndex !== -1 && updatedData) {
+                currentLoggers[loggerIndex] = { ...currentLoggers[loggerIndex], ...updatedData };
+            }
+
+            const row = document.querySelector(`tr[data-logger-name="${loggerName || 'root'}"]`);
+            if (!row) return;
+
+            // 更新UI元素
+            const enabledCheckbox = row.querySelector('.enabled-checkbox');
+            const levelBadge = row.querySelector('.level-badge');
+            const radioInputs = row.querySelectorAll('input[type="radio"]');
+
+            if (enabledCheckbox) {
+                enabledCheckbox.checked = !updatedData.disabled;
+            }
+
+            if (levelBadge && updatedData.effective_level) {
+                const effectiveLevel = updatedData.disabled ? 'DISABLED' : updatedData.effective_level;
+                levelBadge.textContent = effectiveLevel;
+                levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
+                updateLevelBadgeStyle(levelBadge, effectiveLevel);
+            }
+
+            // 更新radio按钮状态
+            radioInputs.forEach(radio => {
+                radio.checked = radio.value === updatedData.level;
+                radio.disabled = updatedData.disabled;
+            });
+
+            row.classList.remove('updating');
         }
 
         // Show/hide loading indicator

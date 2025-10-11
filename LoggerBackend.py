@@ -130,7 +130,7 @@ class LoggerBackend:
         if self.logger_manager:
             self.app.add_url_rule('/logger/logger_config', 'logger_config', maybe_wrap(self.logger_config))
             self.app.add_url_rule('/logger/api/get_loggers', 'get_loggers', maybe_wrap(self.get_loggers), methods=['GET'])
-            self.app.add_url_rule('/logger/api/config_logger', 'config_logger', maybe_wrap(self.config_logger), methods=['POST'])
+            self.app.add_url_rule('/logger/api/config_loggers', 'config_loggers', maybe_wrap(self.config_loggers), methods=['POST'])
 
     # ------------------------------------------ Web Service ------------------------------------------
 
@@ -296,7 +296,7 @@ class LoggerBackend:
             print(traceback.format_exc())
             return jsonify({'success': False, 'error': str(e)})
 
-    def config_logger(self):
+    def config_loggers(self):
         """Update logger configuration for one or multiple loggers.
 
         Supports two parameters:
