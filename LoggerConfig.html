@@ -259,14 +259,6 @@
             margin-right: 5px;
         }
 
-        .tree-children {
-            padding-left: 25px;
-        }
-
-        .collapsed .tree-children {
-            display: none;
-        }
-
         .table-section {
             margin-bottom: 20px;
         }
@@ -356,26 +348,6 @@
             background: #3498db;
         }
 
-        .parent-controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-left: 10px;
-        }
-
-        .parent-control-btn {
-            background: #f0f0f0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-
-        .parent-control-btn:hover {
-            background: #e0e0e0;
-        }
-
         @media (max-width: 768px) {
             .container {
                 margin: 10px;
@@ -411,59 +383,6 @@
             }
         }
 
-        .parent-controls {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-left: 10px;
-            vertical-align: middle; /* 确保与文本垂直居中 */
-        }
-
-        .parent-control-btn {
-            background: #3498db; /* 主色调 */
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            line-height: 1;
-            transition: all 0.2s ease;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        .parent-control-btn:hover {
-            background: #2980b9;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-
-        .parent-control-btn:active {
-            transform: translateY(0);
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-
-        .apply-to-children-btn {
-            background: transparent;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            padding: 2px 6px;
-            margin-left: 8px;
-            transition: all 0.2s ease;
-            opacity: 0.7; /* 默认半透明，鼠标悬停时完全显示 */
-        }
-
-        .apply-to-children-btn:hover {
-            opacity: 1;
-            background: #3498db;
-            border-color: #3498db;
-            color: white;
-            transform: scale(1.1);
-        }
-
         .apply-btn {
             padding: 4px 8px;
             font-size: 11px;
@@ -476,35 +395,6 @@
         }
         .apply-btn:hover {
             background-color: #e5e8e8;
-        }
-        .tristate-checkbox {
-            width: 16px;
-            height: 16px;
-            border: 1px solid #bdc3c7;
-            border-radius: 3px;
-            position: relative;
-            cursor: pointer;
-            display: inline-block;
-            vertical-align: middle;
-        }
-        .tristate-checkbox.checked::before {
-            content: '✓';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 14px;
-            color: #27ae60;
-        }
-        .tristate-checkbox.indeterminate::before {
-            content: '-';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 14px;
-            font-weight: bold;
-            color: #c0392b;
         }
         /* 确保最后一列的标题和内容对齐 */
         #projectTable th:last-child, #thirdPartyTable th:last-child {
@@ -731,7 +621,8 @@
                 node.loggers.forEach(logger => {
                     // 若该 logger 会成为父节点，则跳过，后面会作为父节点行统一画
                     const willBeParent = currentLoggers.some(l => l.name !== logger.name && l.name.startsWith(logger.name + '.'));
-            if (willBeParent) return;   // 后面会作为父节点行统一画
+                    if (willBeParent) return;   // 后面会作为父节点行统一画
+
                     const row = createLoggerRow(logger, depth, false);
                     row.setAttribute('data-depth', depth);
                     container.appendChild(row);
@@ -765,11 +656,6 @@
                 container.appendChild(row);
             });
             node.children.forEach(child => renderNodeRow(child, childDepth, container));
-        }
-
-        // 用新的 renderNodeRow 替换旧的 renderTreeNode
-        function renderTreeNode(node, depth, container, isThirdParty) {
-            renderNodeRow(node, depth, container);
         }
 
         /**
@@ -849,13 +735,6 @@
             const effectiveLevel = logger.disabled ? 'DISABLED' : (logger.effective_level || 'NOTSET');
             levelBadge.className = `level-badge level-${effectiveLevel.toLowerCase()}`;
             levelBadge.textContent = effectiveLevel;
-            levelBadge.style.padding = '4px 8px';
-            levelBadge.style.borderRadius = '12px';
-            levelBadge.style.fontSize = '11px';
-            levelBadge.style.fontWeight = '600';
-            levelBadge.style.display = 'inline-block';
-            levelBadge.style.minWidth = '60px';
-            levelBadge.style.textAlign = 'center';
 
             // Set level badge color based on level
             switch(effectiveLevel.toLowerCase()) {
@@ -1085,41 +964,6 @@
             }
         }
 
-        // Apply settings to multiple loggers
-        async function applySettingsToLoggers(loggerNames, level, enabled) {
-            if (loggerNames.length === 0) return;
-
-            try {
-                const response = await fetch('/logger/api/config_logger', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        names: loggerNames,
-                        level: level,
-                        enabled: enabled
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showStatusMessage(`✅ ${loggerNames.length} loggers updated successfully`, 'success');
-                    refreshLoggers();
-                } else {
-                    throw new Error(data.error || 'Failed to update configuration');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showStatusMessage('❌ Batch update failed: ' + error.message, 'error');
-            }
-        }
-
         // Display loggers in separate tables with tree structure
         function displayLoggers(loggers) {
             // Separate loggers into project and third-party
@@ -1137,8 +981,8 @@
             thirdPartyBody.innerHTML = '';
 
             // Render trees
-            renderTreeNode(projectTree, 0, projectBody, false);
-            renderTreeNode(thirdPartyTree, 0, thirdPartyBody, true);
+            renderNodeRow(projectTree, 0, projectBody);
+            renderNodeRow(thirdPartyTree, 0, thirdPartyBody);
 
             const allRows = document.querySelectorAll('tr[data-node-path]');
             allRows.forEach(row => {
