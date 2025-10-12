@@ -316,10 +316,9 @@ x.a.b
 2. 把父项的Apply放到其名字后面，且使用更短小的图标。注意和子项不同，对于父行的设置（无论其本身是独立logger还是“抽象父行”），都需要在点击应用按钮后才生效。所以要谨慎处理enable和radio被禁用的状态，避免出现使能后在点击应用之前radio按钮不可用。
 
 
+增加一个判断：如果某项它会成为其它项的父节点的话，那么先不要画它。
 
-
-
-
+比如：flask_cors，flask_cors.core，flask_cors.decorator，flask_cors.extension。在绘制flask_cors会跳过，直到作为后面三项的父节点绘制。
 
 
 

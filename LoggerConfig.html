@@ -823,14 +823,21 @@
         }
 
         /**
-         * 渲染树的单个节点。这是渲染逻辑的核心调度器。
-         * 它能正确处理同时是logger又是父节点的项，避免重复。
+         * 渲染树节点核心调度器。
+         * 规则：
+         * 1. 根节点下若某个 logger 会成为其它 logger 的父节点，则先跳过，不画；
+         * 2. 非根节点下，若当前节点对应真实 logger 且会成为父节点，则只画一次（带折叠/Apply 的行）；
+         * 3. 其余逻辑不变。
          */
         function renderNodeRow(node, depth, container) {
-            // 根节点是特殊情况，它不可见，我们只渲染它的子项
+            /* ---------- 根节点特殊处理 ---------- */
             if (node.name === '') {
                 node.loggers.forEach(logger => {
-                    const row = createLoggerRow(logger, depth, false); // 根下的logger不是父节点
+                    // 若该 logger 会成为父节点，则跳过，后面会作为父节点行统一画
+                    const willBeParent = currentLoggers.some(l => l.name !== logger.name && l.name.startsWith(logger.name + '.'));
+                    if (willBeParent) return;
+
+                    const row = createLoggerRow(logger, depth, false);
                     row.setAttribute('data-depth', depth);
                     container.appendChild(row);
                 });
@@ -838,42 +845,36 @@
                 return;
             }
 
-            // 检查当前节点是否对应一个真实的logger
-            const selfLogger = currentLoggers.find(l => l.name === node.fullName);
-
-            // 检查当前节点是否有子项（包括子节点和子logger）
-            // 注意：需要从node.loggers中排除selfLogger，因为它不算是“子”logger
+            /* ---------- 非根节点 ---------- */
+            const selfLogger   = currentLoggers.find(l => l.name === node.fullName);
             const otherLoggers = node.loggers.filter(l => l.name !== node.fullName);
-            const hasChildren = node.children.length > 0 || otherLoggers.length > 0;
+            const hasChildren  = node.children.length > 0 || otherLoggers.length > 0;
 
-            if (selfLogger) {
-                // 情况1: 当前节点是一个真实的logger (例如 'com.example')
-                // 我们渲染一个完整的logger行，如果它有子项，就让它带上折叠功能
-                const row = createLoggerRow(selfLogger, depth, hasChildren);
-                row.setAttribute('data-depth', depth);
-                if (hasChildren) {
-                    row.setAttribute('data-node-path', node.fullName);
-                    row.setAttribute('data-collapsed', 'false');
+            // 只要当前节点有“子”就画一行（真实 logger 或抽象父节点）
+            if (selfLogger || hasChildren) {
+                let row;
+                if (selfLogger) {
+                    // 真实 logger：带折叠/Apply 能力
+                    row = createLoggerRow(selfLogger, depth, hasChildren);
+                    row.setAttribute('data-depth', depth);
+                    if (hasChildren) {
+                        row.setAttribute('data-node-path', node.fullName);
+                        row.setAttribute('data-collapsed', 'false');
+                    }
+                } else {
+                    // 纯抽象父节点
+                    row = createParentRow(node, depth);
                 }
-                container.appendChild(row);
-            } else if (hasChildren) {
-                // 情况2: 当前节点是一个纯粹的“抽象父节点” (例如 'com')
-                // 它本身不是logger，只是为了组织层级。我们为它渲染一个特殊的父节点行。
-                const row = createParentRow(node, depth);
                 container.appendChild(row);
             }
 
-            // 现在，递归渲染子项
+            /* ---------- 递归子项 ---------- */
             const childDepth = depth + 1;
-
-            // 渲染挂在当前节点下的、非自身的、独立的logger
             otherLoggers.forEach(logger => {
-                const row = createLoggerRow(logger, childDepth, false); // 这些总是叶子节点
+                const row = createLoggerRow(logger, childDepth, false);
                 row.setAttribute('data-depth', childDepth);
                 container.appendChild(row);
             });
-
-            // 渲染子节点
             node.children.forEach(child => renderNodeRow(child, childDepth, container));
         }
 
