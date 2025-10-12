@@ -719,110 +719,6 @@
         }
 
         /**
-         * 创建一个用于抽象父节点的行。
-         * 这个行本身不对应一个真实的logger，但它提供了折叠功能和将配置应用到子项的功能。
-         */
-        function createParentRow(node, depth) {
-            const row = document.createElement('tr');
-            row.setAttribute('data-node-path', node.fullName);
-            row.setAttribute('data-collapsed', 'false');
-            row.setAttribute('data-depth', depth);
-
-            // 1. 名称单元格 (带缩进和折叠按钮)
-            const nameCell = document.createElement('td');
-            nameCell.className = 'logger-name';
-            const nameContainer = document.createElement('div');
-            nameContainer.className = 'tree-node';
-            nameContainer.style.display = 'flex';
-            nameContainer.style.alignItems = 'center';
-            nameContainer.style.gap = '8px';
-
-            for (let i = 0; i < depth; i++) {
-                const indent = document.createElement('span');
-                indent.className = 'tree-indent';
-                indent.style.width = '20px';
-                nameContainer.appendChild(indent);
-            }
-
-            const toggle = document.createElement('span');
-            toggle.className = 'tree-toggle';
-            toggle.textContent = '▼';
-            toggle.style.cursor = 'pointer';
-            toggle.style.width = '20px';
-            toggle.onclick = (e) => {
-                e.stopPropagation();
-                toggleTreeNode(node.fullName);
-            };
-            nameContainer.appendChild(toggle);
-
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = node.name;
-            nameSpan.style.fontWeight = '600';
-            nameSpan.style.fontStyle = 'italic'; // 斜体以区分真实logger
-            nameSpan.style.color = '#566573';
-            nameContainer.appendChild(nameSpan);
-            nameCell.appendChild(nameContainer);
-            row.appendChild(nameCell);
-
-            // 2. 启用状态单元格 (三态复选框)
-            const enabledCell = document.createElement('td');
-            const triStateCheckbox = document.createElement('div');
-            triStateCheckbox.className = 'tristate-checkbox';
-            triStateCheckbox.title = "Apply to children: ''=No change, ✓=Enable, -=Disable";
-            triStateCheckbox.onclick = () => toggleTriState(triStateCheckbox);
-            enabledCell.appendChild(triStateCheckbox);
-            row.appendChild(enabledCell);
-
-            // 3. 当前级别单元格 (占位)
-            row.appendChild(document.createElement('td'));
-
-            // 4. 配置单元格 (用于设置子项级别)
-            const configCell = document.createElement('td');
-            const radioGroup = document.createElement('div');
-            radioGroup.className = 'radio-group';
-            const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
-            levels.forEach(level => {
-                const label = document.createElement('label');
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = `level-parent-${node.fullName}`;
-                radio.value = level;
-                label.appendChild(radio);
-                label.appendChild(document.createTextNode(level));
-                radioGroup.appendChild(label);
-            });
-            configCell.appendChild(radioGroup);
-            row.appendChild(configCell);
-
-            // 5. 操作单元格 (应用到子项按钮)
-            const actionCell = document.createElement('td');
-            const applyBtn = document.createElement('button');
-            applyBtn.textContent = 'Apply';
-            applyBtn.className = 'apply-btn';
-            applyBtn.title = 'Apply settings to all children';
-            applyBtn.onclick = () => {
-                const enableState = triStateCheckbox.classList.contains('checked') ? true :
-                                    triStateCheckbox.classList.contains('indeterminate') ? false : undefined;
-                const checkedRadio = radioGroup.querySelector('input:checked');
-                const levelState = checkedRadio ? checkedRadio.value : null;
-                
-                const childLoggerNames = currentLoggers
-                    .filter(l => l.name.startsWith(node.fullName + '.'))
-                    .map(l => l.name);
-
-                if(childLoggerNames.length > 0) {
-                    applySettingsToLoggers(childLoggerNames, levelState, enableState);
-                } else {
-                    showStatusMessage('⚠️ No child loggers found for this node.', 'error');
-                }
-            };
-            actionCell.appendChild(applyBtn);
-            row.appendChild(actionCell);
-
-            return row;
-        }
-
-        /**
          * 渲染树节点核心调度器。
          * 规则：
          * 1. 根节点下若某个 logger 会成为其它 logger 的父节点，则先跳过，不画；
@@ -835,8 +731,7 @@
                 node.loggers.forEach(logger => {
                     // 若该 logger 会成为父节点，则跳过，后面会作为父节点行统一画
                     const willBeParent = currentLoggers.some(l => l.name !== logger.name && l.name.startsWith(logger.name + '.'));
-                    if (willBeParent) return;
-
+            if (willBeParent) return;   // 后面会作为父节点行统一画
                     const row = createLoggerRow(logger, depth, false);
                     row.setAttribute('data-depth', depth);
                     container.appendChild(row);
@@ -852,18 +747,12 @@
 
             // 只要当前节点有“子”就画一行（真实 logger 或抽象父节点）
             if (selfLogger || hasChildren) {
-                let row;
-                if (selfLogger) {
-                    // 真实 logger：带折叠/Apply 能力
-                    row = createLoggerRow(selfLogger, depth, hasChildren);
-                    row.setAttribute('data-depth', depth);
-                    if (hasChildren) {
-                        row.setAttribute('data-node-path', node.fullName);
-                        row.setAttribute('data-collapsed', 'false');
-                    }
-                } else {
-                    // 纯抽象父节点
-                    row = createParentRow(node, depth);
+            // 统一用 createLoggerRow 画，抽象父节点也把 isParentNode 设为 true
+            const row = createLoggerRow(selfLogger || { name: node.fullName, disabled: false, level: null }, depth, true);
+                row.setAttribute('data-depth', depth);
+                if (hasChildren) {
+                    row.setAttribute('data-node-path', node.fullName);
+                    row.setAttribute('data-collapsed', 'false');
                 }
                 container.appendChild(row);
             }
@@ -1034,6 +923,15 @@
                 applyBtn.title = 'Apply this logger\'s settings to all its children';
                 applyBtn.onclick = (e) => {
                     e.stopPropagation();
+
+                    // 关键判断：只有真实 logger 才发请求
+                    const isRealLogger = currentLoggers.some(l => l.name === logger.name);
+                    if (!isRealLogger) {
+                        // 抽象父节点：本地预览一下，不做任何网络请求
+                        showStatusMessage('ℹ️ Abstract parent – changes are preview only.', 'info');
+                        return;
+                    }
+
                     applyToChildren(logger.name);
                 };
                 actionCell.appendChild(applyBtn);
