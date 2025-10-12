@@ -24,6 +24,7 @@ class LoggerBackend:
                  monitoring_file_path: str,
                  cache_limit_count: int,
                  link_file_roots: dict = None,
+                 project_root: str | None = None,
                  with_logger_manager: bool = False):
 
         self.log_file = monitoring_file_path
@@ -31,8 +32,11 @@ class LoggerBackend:
 
         # If you run LoggerBackend standalone. LoggerManager is useless.
         if with_logger_manager:
-            from LoggerManager import LoggerManager
-            self.logger_manager = LoggerManager()
+            if __name__ == '__main__':
+                from LoggerManager import LoggerManager
+            else:
+                from .LoggerManager import LoggerManager
+            self.logger_manager = LoggerManager(project_root)
         else:
             self.logger_manager = None
 

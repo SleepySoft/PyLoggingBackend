@@ -17,7 +17,8 @@ def get_logger_module_file_path(logger_name):
 class LoggerManager:
     """Logging manager for dynamically managing logging configurations"""
 
-    def __init__(self):
+    def __init__(self, project_root: str | None = None):
+        self.project_root = project_root
         self.loggers = {}
         self.disabled_level = 100  # Custom disabled level, higher than CRITICAL
 
@@ -55,12 +56,14 @@ class LoggerManager:
                 })
                 self.loggers[name] = logger
 
-        if project_root:
+        self.project_root = self.project_root or project_root
+
+        if self.project_root:
             for i, logger in enumerate(loggers_info):
                 if i == 0:
-                    loggers_info[0]['path'] = project_root
+                    loggers_info[0]['path'] = self.project_root
                 else:
-                    module_in_project = self._is_module_in_project(loggers_info[i]['path'], project_root)
+                    module_in_project = self._is_module_in_project(loggers_info[i]['path'], self.project_root)
                     loggers_info[i]['in_project'] = module_in_project
 
         return sorted(loggers_info, key=lambda x: x['name'])
