@@ -742,11 +742,6 @@
                 </svg>`;
                 applyIcon.onclick = e => {
                     e.stopPropagation();
-                    // const isRealLogger = currentLoggers.some(l => l.name === logger.name);
-                    // if (!isRealLogger) {
-                    //     showStatusMessage('ℹ️ Abstract parent – changes are preview only.', 'info');
-                    //     return;
-                    // }
                     applyToChildren(logger.name);
                 };
                 nameContainer.appendChild(applyIcon);
@@ -873,14 +868,30 @@
 
         // Apply settings to all children of a node
         function applyToChildren(nodeFullPath) {
-            // Find the logger object for the parent to get its settings
-            const parentLogger = currentLoggers.find(l => l.name === nodeFullPath);
-            if (!parentLogger) {
-                showStatusMessage(`⚠️ Could not find settings for parent '${nodeFullPath}'`, 'error');
+            /* 1. 先找到界面上的父行（一定存在，因为按钮点得出来） */
+            const parentRow = document.querySelector(`tr[data-logger-name="${nodeFullPath}"]`);
+            if (!parentRow) return;          // 理论上不会走到
+
+            /* 2. 从这一行把“用户看到的”配置读出来 */
+            // 启用状态
+            const enabled = parentRow.querySelector('.enabled-checkbox').checked;
+
+            // 级别：先看哪个 radio 被选中，没有就选当前 badge 里的 effective level
+            const checkedRadio = parentRow.querySelector('input[type="radio"]:checked');
+            let level = null;
+            if (checkedRadio) {
+                level = checkedRadio.value;
+            } else {                         // 可能是个虚拟节点，radio 全是未选，就读 badge
+                const badgeText = parentRow.querySelector('.level-badge').textContent.trim();
+                if (badgeText !== 'DISABLED') level = badgeText;
+            }
+
+            if (enabled && !level) {         // 想启用但又没选级别，不允许下推
+                showStatusMessage(`⚠️ Parent '${nodeFullPath}' has no explicit level set. Cannot apply.`, 'error');
                 return;
             }
 
-            // Collect all child logger names
+            /* 3. 收集所有子 logger 名字（逻辑不变） */
             const childLoggerNames = currentLoggers
                 .filter(l => l.name !== nodeFullPath && l.name.startsWith(nodeFullPath + '.'))
                 .map(l => l.name);
@@ -890,16 +901,7 @@
                 return;
             }
 
-            // Get settings from the parent logger object
-            const enabled = !parentLogger.disabled;
-            const level = parentLogger.level;
-
-            if (enabled && (level === null || level === undefined || level == 'NOTSET')) {
-                 showStatusMessage(`⚠️ Parent '${nodeFullPath}' has no explicit level set. Cannot apply.`, 'error');
-                 return;
-            }
-
-            // Apply settings to all children
+            /* 4. 统一下推（复用原函数，无需改动） */
             applySettingsToLoggers(childLoggerNames, level, enabled);
         }
 
@@ -1138,7 +1140,7 @@
 
         // Update logger configuration
         async function updateLoggerConfig(loggerName, level, enabled) {
-            const isRealLogger = currentLoggers.some(l => l.name === logger.name);
+            const isRealLogger = currentLoggers.some(l => l.name === loggerName);
             if (!isRealLogger) { return; }
 
             const row = document.querySelector(`tr[data-logger-name="${loggerName || 'root'}"]`);
