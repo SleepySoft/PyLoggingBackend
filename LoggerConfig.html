@@ -615,7 +615,7 @@
          * 2. 非根节点下，若当前节点对应真实 logger 且会成为父节点，则只画一次（带折叠/Apply 的行）；
          * 3. 其余逻辑不变。
          */
-        function renderNodeRow(node, depth, container) {
+        function renderNodeRow(node, depth, container, tbodyId) {
             /* ---------- 根节点特殊处理 ---------- */
             if (node.name === '') {
                 node.loggers.forEach(logger => {
@@ -623,11 +623,11 @@
                     const willBeParent = currentLoggers.some(l => l.name !== logger.name && l.name.startsWith(logger.name + '.'));
                     if (willBeParent) return;   // 后面会作为父节点行统一画
 
-                    const row = createLoggerRow(logger, depth, false);
+                    const row = createLoggerRow(logger, depth, false, tbodyId);
                     row.setAttribute('data-depth', depth);
                     container.appendChild(row);
                 });
-                node.children.forEach(child => renderNodeRow(child, depth, container));
+                node.children.forEach(child => renderNodeRow(child, depth, container, tbodyId));
                 return;
             }
 
@@ -638,24 +638,24 @@
 
             // 只要当前节点有“子”就画一行（真实 logger 或抽象父节点）
             if (selfLogger || hasChildren) {
-            // 统一用 createLoggerRow 画，抽象父节点也把 isParentNode 设为 true
-            const row = createLoggerRow(selfLogger || { name: node.fullName, disabled: false, level: null }, depth, true);
-                row.setAttribute('data-depth', depth);
-                if (hasChildren) {
-                    row.setAttribute('data-node-path', node.fullName);
-                    row.setAttribute('data-collapsed', 'false');
+                // 统一用 createLoggerRow 画，抽象父节点也把 isParentNode 设为 true
+                const row = createLoggerRow(selfLogger || { name: node.fullName, disabled: false, level: null }, depth, true, tbodyId);
+                    row.setAttribute('data-depth', depth);
+                    if (hasChildren) {
+                        row.setAttribute('data-node-path', node.fullName);
+                        row.setAttribute('data-collapsed', 'false');
+                    }
+                    container.appendChild(row);
                 }
-                container.appendChild(row);
-            }
 
-            /* ---------- 递归子项 ---------- */
-            const childDepth = depth + 1;
-            otherLoggers.forEach(logger => {
-                const row = createLoggerRow(logger, childDepth, false);
-                row.setAttribute('data-depth', childDepth);
-                container.appendChild(row);
-            });
-            node.children.forEach(child => renderNodeRow(child, childDepth, container));
+                /* ---------- 递归子项 ---------- */
+                const childDepth = depth + 1;
+                otherLoggers.forEach(logger => {
+                    const row = createLoggerRow(logger, childDepth, false, tbodyId);
+                    row.setAttribute('data-depth', childDepth);
+                    container.appendChild(row);
+                });
+            node.children.forEach(child => renderNodeRow(child, childDepth, container, tbodyId));
         }
 
         /**
@@ -663,7 +663,7 @@
          * 修复：增加了 isParentNode 参数，用于决定是显示折叠按钮还是占位符，
          * 并决定是否显示“应用到子项”按钮。
          */
-        function createLoggerRow(logger, depth, isParentNode = false) {
+        function createLoggerRow(logger, depth, isParentNode = false, tbodyId = '') {
             const row = document.createElement('tr');
             row.setAttribute('data-logger-name', logger.name || 'root');
 
@@ -691,6 +691,7 @@
             if (isParentNode) {
                 const toggle = document.createElement('span');
                 toggle.className = 'tree-toggle';
+                toggle.setAttribute('data-tbody-id', tbodyId);   // 'projectTableBody' 或 'thirdPartyTableBody'
                 toggle.textContent = '▼';
                 toggle.style.cursor = 'pointer';
                 toggle.style.width = '20px';
@@ -698,7 +699,8 @@
                 toggle.style.fontSize = '12px';
                 toggle.onclick = (e) => {
                     e.stopPropagation();
-                    toggleTreeNode(logger.name); // 使用logger.name作为路径
+                    const tbodyId = toggle.getAttribute('data-tbody-id');
+                    toggleTreeNode(logger.name, tbodyId); // 使用logger.name作为路径
                 };
                 nameContainer.appendChild(toggle);
             } else {
@@ -777,7 +779,8 @@
                 radio.type = 'radio';
                 radio.name = `level-${logger.name || 'root'}`;
                 radio.value = level;
-                radio.checked = logger.level === level;
+                // 如果没有显式 level，就用生效等级做默认选中
+                radio.checked = (logger.level || logger.effective_level) === level;
                 radio.disabled = logger.disabled;
                 radio.onchange = () => { if (radio.checked) { updateLoggerConfig(logger.name, level, !logger.disabled); } };
 
@@ -927,40 +930,28 @@
             }
         }
 
-        // Toggle tree node expansion/collapse
-        function toggleTreeNode(nodePath) {
-            // 这次收集“所有行”，而不是只带 data-node-path 的
-            const allRows = document.querySelectorAll('#projectTableBody tr, #thirdPartyTableBody tr');
-            let startIndex = -1;
-            let currentDepth;
+        function toggleTreeNode(nodePath, tbodyId) {
+            const rows = [...document.getElementById(tbodyId).querySelectorAll('tr')];
 
-            // 先找到被点击的节点行
-            allRows.forEach((row, idx) => {
-                if (row.getAttribute('data-node-path') === nodePath) {
-                startIndex = idx;
-                currentDepth = parseInt(row.getAttribute('data-depth'), 10);
-                }
-            });
+            // 2. 找到被点的行
+            const parentIdx = rows.findIndex(r => r.getAttribute('data-node-path') === nodePath);
+            if (parentIdx === -1) return;
 
-            if (startIndex === -1) return;
+            const parentRow  = rows[parentIdx];
+            const parentDepth = parseInt(parentRow.getAttribute('data-depth'), 10);
+            const isCollapsed = parentRow.getAttribute('data-collapsed') === 'true';
 
-            const nodeRow = allRows[startIndex];
-            const isCollapsed = nodeRow.getAttribute('data-collapsed') === 'true';
-            nodeRow.setAttribute('data-collapsed', String(!isCollapsed));
-
-            const toggle = nodeRow.querySelector('.tree-toggle');
+            // 3. 翻转折叠标记 + 图标
+            parentRow.setAttribute('data-collapsed', String(!isCollapsed));
+            const toggle = parentRow.querySelector('.tree-toggle');
             if (toggle) toggle.textContent = isCollapsed ? '▼' : '▶';
 
-            // 从下一行开始，遇到同层或更浅层就停
-            for (let i = startIndex + 1; i < allRows.length; i++) {
-                const row = allRows[i];
+            // 4. 从 parent 下一行开始，按“深度优先”处理所有后代
+            for (let i = parentIdx + 1; i < rows.length; i++) {
+                const row      = rows[i];
                 const rowDepth = parseInt(row.getAttribute('data-depth'), 10);
-                if (rowDepth <= currentDepth) break;
-
-                // 只处理直接子层（currentDepth+1）即可，更深层的可见性由它们自己状态决定
-                if (rowDepth === currentDepth + 1) {
+                if (rowDepth <= parentDepth) break;          // 同层或更浅：这支走完了
                 row.style.display = isCollapsed ? '' : 'none';
-                }
             }
         }
 
@@ -981,8 +972,8 @@
             thirdPartyBody.innerHTML = '';
 
             // Render trees
-            renderNodeRow(projectTree, 0, projectBody);
-            renderNodeRow(thirdPartyTree, 0, thirdPartyBody);
+            renderNodeRow(projectTree, 0, projectBody, 'projectTableBody');
+            renderNodeRow(thirdPartyTree, 0, thirdPartyBody, 'thirdPartyTableBody');
 
             const allRows = document.querySelectorAll('tr[data-node-path]');
             allRows.forEach(row => {
