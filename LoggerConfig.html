@@ -400,6 +400,21 @@
         #projectTable th:last-child, #thirdPartyTable th:last-child {
             width: 100px;
         }
+        .apply-icon {
+            all: unset;               /* 去掉 button 默认样式 */
+            cursor: pointer;
+            color: #adb5bd;           /* 默认浅灰 */
+            transition: color .2s;
+            display: inline-flex;
+            align-items: center;
+            margin-left: 6px;         /* 与名字留一点间隔 */
+        }
+        .apply-icon:hover {
+            color: #0d6efd;           /* hover 高亮 */
+        }
+        .apply-icon svg {
+            vertical-align: middle;   /* 保证与文字居中对齐 */
+        }
     </style>
 </head>
 <body>
@@ -621,6 +636,7 @@
                 node.loggers.forEach(logger => {
                     // 若该 logger 会成为父节点，则跳过，后面会作为父节点行统一画
                     const willBeParent = currentLoggers.some(l => l.name !== logger.name && l.name.startsWith(logger.name + '.'));
+
                     if (willBeParent) return;   // 后面会作为父节点行统一画
 
                     const row = createLoggerRow(logger, depth, false, tbodyId);
@@ -648,22 +664,18 @@
                     container.appendChild(row);
                 }
 
-                /* ---------- 递归子项 ---------- */
-                const childDepth = depth + 1;
-                otherLoggers.forEach(logger => {
-                    const row = createLoggerRow(logger, childDepth, false, tbodyId);
-                    row.setAttribute('data-depth', childDepth);
-                    container.appendChild(row);
-                });
+            /* ---------- 递归子项 ---------- */
+            const childDepth = depth + 1;
+            otherLoggers.forEach(logger => {
+                const row = createLoggerRow(logger, childDepth, false, tbodyId);
+                row.setAttribute('data-depth', childDepth);
+                container.appendChild(row);
+            });
             node.children.forEach(child => renderNodeRow(child, childDepth, container, tbodyId));
         }
 
-        /**
-         * 创建一个logger的表格行。
-         * 修复：增加了 isParentNode 参数，用于决定是显示折叠按钮还是占位符，
-         * 并决定是否显示“应用到子项”按钮。
-         */
         function createLoggerRow(logger, depth, isParentNode = false, tbodyId = '') {
+            const isRealLogger = currentLoggers.some(l => l.name === logger.name);
             const row = document.createElement('tr');
             row.setAttribute('data-logger-name', logger.name || 'root');
 
@@ -699,7 +711,6 @@
                 toggle.style.fontSize = '12px';
                 toggle.onclick = (e) => {
                     e.stopPropagation();
-                    const tbodyId = toggle.getAttribute('data-tbody-id');
                     toggleTreeNode(logger.name, tbodyId); // 使用logger.name作为路径
                 };
                 nameContainer.appendChild(toggle);
@@ -718,6 +729,29 @@
             nameSpan.style.flex = '1';
             nameContainer.appendChild(nameSpan);
 
+            // ===== 新增：Apply 图标按钮 =====
+            if (isParentNode) {
+                const applyIcon = document.createElement('button');
+                applyIcon.className = 'apply-icon';
+                applyIcon.type = 'button';
+                applyIcon.setAttribute('aria-label', 'Apply to children');
+                applyIcon.innerHTML = `
+                <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                    <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0z"/>
+                    <path d="M6.5 4.5l4 3-4 3v-6z"/>
+                </svg>`;
+                applyIcon.onclick = e => {
+                    e.stopPropagation();
+                    // const isRealLogger = currentLoggers.some(l => l.name === logger.name);
+                    // if (!isRealLogger) {
+                    //     showStatusMessage('ℹ️ Abstract parent – changes are preview only.', 'info');
+                    //     return;
+                    // }
+                    applyToChildren(logger.name);
+                };
+                nameContainer.appendChild(applyIcon);
+            }
+
             nameCell.appendChild(nameContainer);
 
             // Enabled status checkbox
@@ -727,7 +761,11 @@
             checkbox.type = 'checkbox';
             checkbox.className = 'enabled-checkbox';
             checkbox.checked = !logger.disabled;
-            checkbox.onchange = () => updateLoggerConfig(logger.name, null, checkbox.checked);
+
+            if (isRealLogger) {
+                checkbox.onchange = () => updateLoggerConfig(logger.name, null, checkbox.checked);
+            }
+
             enabledCell.appendChild(checkbox);
 
             // Current level badge
@@ -788,8 +826,14 @@
 
                 radio.checked = activeLevel === level;
 
-                radio.disabled = logger.disabled;
-                radio.onchange = () => { if (radio.checked) { updateLoggerConfig(logger.name, level, !logger.disabled); } };
+                radio.disabled = isRealLogger && logger.disabled;
+                if (isRealLogger) {
+                    radio.onchange = () => {
+                        if (isRealLogger) {
+                            updateLoggerConfig(logger.name, level, !logger.disabled);
+                        }
+                    };
+                }
 
                 const levelText = document.createElement('span');
                 levelText.textContent = level;
@@ -805,37 +849,17 @@
             // Handlers count / "Apply to Children" button
             const actionCell = document.createElement('td');
             actionCell.style.width = '100px';
-            if (isParentNode) {
-                const applyBtn = document.createElement('button');
-                applyBtn.textContent = 'Apply';
-                applyBtn.className = 'apply-btn';
-                applyBtn.title = 'Apply this logger\'s settings to all its children';
-                applyBtn.onclick = (e) => {
-                    e.stopPropagation();
-
-                    // 关键判断：只有真实 logger 才发请求
-                    const isRealLogger = currentLoggers.some(l => l.name === logger.name);
-                    if (!isRealLogger) {
-                        // 抽象父节点：本地预览一下，不做任何网络请求
-                        showStatusMessage('ℹ️ Abstract parent – changes are preview only.', 'info');
-                        return;
-                    }
-
-                    applyToChildren(logger.name);
-                };
-                actionCell.appendChild(applyBtn);
-            } else {
-                const handlersBadge = document.createElement('span');
-                handlersBadge.className = 'handlers-count';
-                handlersBadge.textContent = `${logger.handlers_count || 0} handlers`;
-                handlersBadge.style.background = '#e8f4f8';
-                handlersBadge.style.color = '#2980b9';
-                handlersBadge.style.padding = '4px 8px';
-                handlersBadge.style.borderRadius = '10px';
-                handlersBadge.style.fontSize = '11px';
-                handlersBadge.style.fontWeight = '600';
-                actionCell.appendChild(handlersBadge);
-            }
+            
+            const handlersBadge = document.createElement('span');
+            handlersBadge.className = 'handlers-count';
+            handlersBadge.textContent = `${logger.handlers_count || 0} handlers`;
+            handlersBadge.style.background = '#e8f4f8';
+            handlersBadge.style.color = '#2980b9';
+            handlersBadge.style.padding = '4px 8px';
+            handlersBadge.style.borderRadius = '10px';
+            handlersBadge.style.fontSize = '11px';
+            handlersBadge.style.fontWeight = '600';
+            actionCell.appendChild(handlersBadge);
 
             // Append all cells to row
             row.appendChild(nameCell);
@@ -870,7 +894,7 @@
             const enabled = !parentLogger.disabled;
             const level = parentLogger.level;
 
-            if (level === null || level === undefined) {
+            if (enabled && (level === null || level === undefined || level == 'NOTSET')) {
                  showStatusMessage(`⚠️ Parent '${nodeFullPath}' has no explicit level set. Cannot apply.`, 'error');
                  return;
             }
@@ -1114,6 +1138,9 @@
 
         // Update logger configuration
         async function updateLoggerConfig(loggerName, level, enabled) {
+            const isRealLogger = currentLoggers.some(l => l.name === logger.name);
+            if (!isRealLogger) { return; }
+
             const row = document.querySelector(`tr[data-logger-name="${loggerName || 'root'}"]`);
             if (row) row.classList.add('updating');
 
