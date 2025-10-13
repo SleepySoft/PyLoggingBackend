@@ -886,7 +886,7 @@
                 if (badgeText !== 'DISABLED') level = badgeText;
             }
 
-            if (enabled && !level) {         // 想启用但又没选级别，不允许下推
+            if (enabled && (!level || level == 'NOTSET')) {         // 想启用但又没选级别，不允许下推
                 showStatusMessage(`⚠️ Parent '${nodeFullPath}' has no explicit level set. Cannot apply.`, 'error');
                 return;
             }
@@ -902,7 +902,7 @@
             }
 
             /* 4. 统一下推（复用原函数，无需改动） */
-            applySettingsToLoggers(childLoggerNames, level, enabled);
+            applySettingsToLoggers(childLoggerNames, level, enabled, true);
         }
 
         // Toggle section visibility
@@ -1103,7 +1103,7 @@
         }
 
         // Apply settings to a list of loggers
-        async function applySettingsToLoggers(loggerNames, level, enabled) {
+        async function applySettingsToLoggers(loggerNames, level, enabled, silent = false) {
             if (loggerNames.length === 0) return;
 
             try {
@@ -1125,16 +1125,32 @@
                 }
 
                 const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to update configuration');
 
-                if (data.success) {
+                if (silent) {
+                    // 1. 更新内存
+                    loggerNames.forEach(name => {
+                        const idx = currentLoggers.findIndex(l => l.name === name);
+                        if (idx !== -1) {
+                            if (level) currentLoggers[idx].level = level;
+                            if (enabled !== undefined) currentLoggers[idx].disabled = !enabled;
+                        }
+                    });
+                    // 2. 逐行刷新 UI
+                    loggerNames.forEach(name => updateLoggerRow(name, level, enabled));
+                    showStatusMessage(`✅ ${loggerNames.length} loggers updated`, 'success');
+                } else {
+                    // 保持原逻辑：整页刷新
                     showStatusMessage(`✅ ${loggerNames.length} loggers updated`, 'success');
                     refreshLoggers();
-                } else {
-                    throw new Error(data.error || 'Failed to update configuration');
                 }
             } catch (error) {
                 console.error('Error:', error);
                 showStatusMessage('❌ Batch update failed: ' + error.message, 'error');
+                if (silent) {
+                    // 静默模式下也做错误提示，并回滚
+                    refreshLoggers();
+                }
             }
         }
 
