@@ -746,6 +746,7 @@
                 case 'error': levelBadge.style.background = '#f8d7da'; levelBadge.style.color = '#721c24'; break;
                 case 'critical': levelBadge.style.background = '#f5c6cb'; levelBadge.style.color = '#721c24'; break;
                 case 'disabled': levelBadge.style.background = '#e2e3e5'; levelBadge.style.color = '#383d41'; break;
+                case 'notset': levelBadge.style.background = '#f8f9fa'; levelBadge.style.color = '#6c757d'; break;
                 default: levelBadge.style.background = '#e8f4f8'; levelBadge.style.color = '#2980b9';
             }
             levelCell.appendChild(levelBadge);
@@ -779,8 +780,14 @@
                 radio.type = 'radio';
                 radio.name = `level-${logger.name || 'root'}`;
                 radio.value = level;
-                // 如果没有显式 level，就用生效等级做默认选中
-                radio.checked = (logger.level || logger.effective_level) === level;
+
+                const activeLevel = (
+                    logger.level != null && logger.level !== 'NOTSET'
+                ) ? logger.level
+                : (logger.effective_level || 'NOTSET');
+
+                radio.checked = activeLevel === level;
+
                 radio.disabled = logger.disabled;
                 radio.onchange = () => { if (radio.checked) { updateLoggerConfig(logger.name, level, !logger.disabled); } };
 
