@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Flask",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flask",
+      "env": {
+        "FLASK_APP": "IntelligenceHubStartup:wsgi_app",
+        "FLASK_DEBUG": "1"
+      },
+      "args": ["run", "--port=5000"],
+      "jinja": true,
+      "console": "integratedTerminal"
+    },
+   
+    {
+      "name": "Debug Frontend",
+      "type": "pwa-chrome", 
+      "request": "launch",
+      "url": "http://localhost:5000/login",
+      "webRoot": "${workspaceFolder}",
+      "sourceMapPathOverrides": {
+        "webpack:///./*": "${webRoot}/*"
+      },
+      "skipFiles": [
+        "node_modules/**",
+        "<node_internals>/**"
+      ],
+      "trace": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack Debug",
+      "configurations": ["Python: Flask", "Debug Frontend"]
+    }
+  ]
+}
