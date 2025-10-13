@@ -674,7 +674,7 @@
 
                         <div class="card module-panel">
                           <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                            <span><i class="fas fa-sitemap"></i> Modules</span>
+                            <span><i class="fas fa-sitemap"></i> Modules Exclude</span>
 
                             <div class="btn-group">
                                 <button class="btn btn-sm btn-light" onclick="toggleAllModules(true)" title="Select All Modules">
@@ -1860,7 +1860,7 @@
             const moduleStr = segs.join('.');
 
             // 4. 任一规则满足即可
-            return selectedModules.some(rule => {
+            return !selectedModules.some(rule => {
                 if (rule.endsWith('.*')) {
                     // 非叶子规则：前缀匹配
                     const prefix = rule.slice(0, -2);
