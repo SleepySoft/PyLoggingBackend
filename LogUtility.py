@@ -252,3 +252,14 @@ def set_tls_logger(
                 pass
 
         return old
+
+
+
+def get_tls_logger(name: str) -> _LazyTLSLogger:
+    """Delay-create logger named *name* (no leveling)."""
+    return _LazyTLSLogger(name, use_leveling=False)
+
+
+def create_tls_leveling_logger(name: str) -> _LazyTLSLogger:
+    """Delay-create logger by appending *name* to TLS parent."""
+    return _LazyTLSLogger(name, use_leveling=True)
