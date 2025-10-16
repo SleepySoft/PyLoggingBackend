@@ -584,6 +584,18 @@
         .log-container .card-header {
             border-radius: 0 !important;
         }
+
+        /* 让模块卡片标题左右分栏 /
+        .card.module-panel .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        / radio 按钮组再压小一点 */
+        .card.module-panel .btn-group-sm .btn {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.45rem;
+        }
     </style>
 </head>
 <body>
@@ -673,9 +685,16 @@
                         </div>
 
                         <div class="card module-panel">
-                          <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                            <span><i class="fas fa-sitemap"></i> Modules Exclude</span>
-
+                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center justify-content-between flex-grow-1">
+                                    <span><i class="fas fa-sitemap"></i> Module Filter</span>
+                                    <div class="btn-group btn-group-sm" role="group" aria-label="Filter mode">
+                                        <input type="radio" class="btn-check" name="moduleMode" id="modeInclude" value="include" autocomplete="off">
+                                        <label class="btn btn-outline-light btn-sm" for="modeInclude">Include</label>
+                                        <input type="radio" class="btn-check" name="moduleMode" id="modeExclude" value="exclude" autocomplete="off" checked>
+                                        <label class="btn btn-outline-light btn-sm" for="modeExclude">Exclude</label>
+                                    </div>
+                                </div>
                             <div class="btn-group">
                                 <button class="btn btn-sm btn-light" onclick="toggleAllModules(true)" title="Select All Modules">
                                     <i class="fas fa-check-square"></i>
@@ -1345,6 +1364,7 @@
         // 显示列表相关变量
         let displayMinId = null; // 当前显示的最小_id
         let displayMaxId = null; // 当前显示的最大_id
+        let moduleFilterMode = 'exclude';   // 'include' | 'exclude'
 
         // --- MODIFIED: `mergeLogsToCache` now also updates the lookup map and trims the cache ---
         function mergeLogsToCache(newLogs) {
@@ -1860,16 +1880,16 @@
             const moduleStr = segs.join('.');
 
             // 4. 任一规则满足即可
-            return !selectedModules.some(rule => {
+            // 根据 Include / Exclude 模式决定可见性
+            const hit = selectedModules.some(rule => {
                 if (rule.endsWith('.*')) {
-                    // 非叶子规则：前缀匹配
-                    const prefix = rule.slice(0, -2);
-                    return moduleStr === prefix || moduleStr.startsWith(prefix + '.');
+                const prefix = rule.slice(0, -2);
+                return moduleStr === prefix || moduleStr.startsWith(prefix + '.');
                 } else {
-                    // 叶子规则：完整匹配
                     return moduleStr === rule;
                 }
             });
+            return moduleFilterMode === 'include' ? hit : !hit;
         }
 
         function toggleAllModules(selectAll = true) {
@@ -1910,6 +1930,8 @@
         }
 
         function applyFilters() {
+            moduleFilterMode = document.querySelector('input[name="moduleMode"]:checked').value;
+
             // 1. Update filter state from UI (no visual change yet)
             updateSelectedLevels();
             rebuildSelectedModules();
