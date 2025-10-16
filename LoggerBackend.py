@@ -363,27 +363,6 @@ class LoggerBackend:
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
 
-    # def config_logger(self):
-    #     """Update logger configuration"""
-    #     try:
-    #         data = request.get_json()
-    #         logger_name = data.get('name')
-    #         level = data.get('level')
-    #         enabled = data.get('enabled', True)
-    #
-    #         if not logger_name:
-    #             return jsonify({'success': False, 'error': 'Logger name cannot be empty'})
-    #
-    #         success = self.logger_manager.set_logger_level(logger_name, level, enabled)
-    #         if success:
-    #             logger.info(f"Logger '{logger_name}' configuration updated: level={level}, enabled={enabled}")
-    #             return jsonify({'success': True})
-    #         else:
-    #             return jsonify({'success': False, 'error': 'Failed to update logger configuration'})
-    #
-    #     except Exception as e:
-    #         return jsonify({'success': False, 'error': str(e)})
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 

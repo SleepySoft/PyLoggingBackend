@@ -280,41 +280,6 @@ class LogFileWrapper:
         with self.lock:
             return current_log_id < self.get_newest_log_id()
 
-        # """
-        # Check if new logs are available since specified _id
-        #
-        # Args:
-        #     current_log_id: Last known _id by client
-        #
-        # Returns:
-        #     Dictionary with update information:
-        #     {
-        #         'has_updates': bool,
-        #         'new_count': int,
-        #         'min_id': int,
-        #         'max_id': int
-        #     }
-        # """
-        # with self.lock:
-        #     if not self.log_entries:
-        #         return {
-        #             'has_updates': False,
-        #             'new_count': 0,
-        #             'min_id': 0,
-        #             'max_id': 0
-        #         }
-        #
-        #     min_id = self.log_entries[0]['_id']
-        #     max_id = self.log_entries[-1]['_id']
-        #     new_count = max(0, max_id - max(min_id - 1, current_log_id))
-        #
-        #     return {
-        #         'has_updates': new_count > 0,
-        #         'new_count': new_count,
-        #         'min_id': min_id,
-        #         'max_id': max_id
-        #     }
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 
