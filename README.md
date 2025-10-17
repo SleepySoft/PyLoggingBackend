@@ -30,12 +30,16 @@ python的logging模块可以将log输出到文件，配合jsonlogger的Formatter
 > 
 > 最初的设计中包括filter在内的大部分功能都由后端完成，后来为了效率和简化实现，后端提供全量数据，filter功能全部由前端实现。
 > 
+> [202510] 增加logger配置功能，可以在线列举及配置本应用中所有logger显示等级。
+> 
 
 [LoggerViewer.html](LoggerViewer.html) log浏览器前端。
 >
 > 当前所有的filter功能都在前端实现。为了灵活，模块树的层级可配置。模块过滤逻辑为：选择上层模块即包含下层所有模块；全不选为不应用模块过滤。
 > 
 > 为了简化，当前前端最大支持5000条log显示，超出后新log会挤掉旧log，而并非一个显示5000条log的滑动窗口。
+> 
+> 接下来会逐步改进为无限log浏览及无缝连接实时log功能。
 > 
 > ![frontend_1.png](docs/frontend_1.png)
 > 
@@ -46,5 +50,16 @@ python的logging模块可以将log输出到文件，配合jsonlogger的Formatter
 > ![img.png](docs/frontend_3.png)
 > 
 
-##
+[LoggerConfig.html](LoggerConfig.html)
+> 
+> [202510] 在线logger配置功能。
+> 
+> 在实现Viewer的Fileter后，我感觉功能上还差一点，即：我想要的不仅是通过filter过滤log，更多的场景是希望能一些log根本不要产生。
+> 因此，增加了这个logger实时配置功能。由运行在主程序中的后端（后端独立运行不行）枚举本程序所有的logger及接受前端下发配置。
+> 
+> 前端则分两个表显示第三方库及工程中内的logger，且根据logger层次按树型显示。
+> 可以通过表头直接批量配置该表所有的logger，也可以通过父项批量下发配置给其所有子项。
+> 
+
+## 
 
