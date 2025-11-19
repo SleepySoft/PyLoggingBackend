@@ -8,29 +8,108 @@ from typing import Optional, Union, Any
 from pythonjsonlogger import jsonlogger
 
 
-# Configure root logger with JSON formatting
-def setup_logging(log_file='application.log'):
-    """Configure structured JSON logging for all modules"""
+class ColoredFormatter(logging.Formatter):
+    """
+    A custom logging formatter that injects ANSI escape codes into log messages
+    to colorize output based on the severity level.
+
+    This is primarily used for human-readable console output during development.
+    It overrides the standard formatting to wrap the message metadata in color tags.
+    """
+
+    # ANSI escape codes for terminal colors
+    GREY = "\x1b[38;20m"
+    GREEN = "\x1b[32;20m"
+    YELLOW = "\x1b[33;20m"
+    RED = "\x1b[31;20m"
+    BOLD_RED = "\x1b[31;1m"
+    RESET = "\x1b[0m"
+
+    # The structure of the log message for the console:
+    # Time - Level - [Module:Function] - Message
+    # We include module and funcName to assist with debugging location.
+    fmt_template = "%(asctime)s - %(levelname)s - [%(module)s:%(funcName)s] - %(message)s"
+
+    # Mapping logging levels to their specific colorized format strings
+    FORMATS = {
+        logging.DEBUG: GREY + fmt_template + RESET,
+        logging.INFO: GREEN + fmt_template + RESET,
+        logging.WARNING: YELLOW + fmt_template + RESET,
+        logging.ERROR: RED + fmt_template + RESET,
+        logging.CRITICAL: BOLD_RED + fmt_template + RESET
+    }
+
+    def format(self, record):
+        """
+        Formats the specified record as text.
+
+        It retrieves the colorized format string corresponding to the log record's level
+        and delegates the actual formatting to the parent logging.Formatter class.
+        """
+        log_fmt = self.FORMATS.get(record.levelno)
+        # We use a simplified time format (H:M:S) for the console to reduce visual noise
+        formatter = logging.Formatter(log_fmt, datefmt='%H:%M:%S')
+        return formatter.format(record)
+
+
+def setup_logging(log_file='application.log', console_json=False):
+    """
+    Configures the root logger with a dual-handler setup:
+    1. Console Handler: Outputs colorized text (default) or JSON.
+    2. File Handler: Always outputs structured JSON.
+
+    Args:
+        log_file (str): The path to the log file where JSON logs will be stored.
+        console_json (bool): If True, console output will be in JSON format (useful for
+                             containerized environments like Docker/K8s).
+                             If False, console output will be colorized text (useful for
+                             local development).
+
+    Returns:
+        logging.Logger: The configured root logger instance.
+    """
+    # Retrieve the root logger to ensure configuration applies globally to all modules
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
 
-    # Clear existing handlers
-    root_logger.handlers = []
+    # Remove any existing handlers to prevent duplicate logs or configuration conflicts
+    # This is crucial when reloading modules or running in certain IDE environments
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
 
-    # JSON formatter with structured data
-    formatter = jsonlogger.JsonFormatter(
+    # --- Formatter Configuration ---
+
+    # 1. JSON Formatter: Used for file output (and optionally console).
+    # It captures detailed context including the custom 'link_file' field.
+    # Note: Standard fields are automatically extracted; 'link_file' relies on the 'extra' dict.
+    json_formatter = jsonlogger.JsonFormatter(
         '%(asctime)s %(name)s %(levelname)s %(module)s %(funcName)s %(message)s %(link_file)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Console handler
+    # 2. Color Formatter: Used specifically for human-readable console output.
+    colored_formatter = ColoredFormatter()
+
+    # --- Handler Configuration ---
+
+    # 1. Console Handler (StreamHandler)
+    # Directs logs to standard output (stdout) to ensure they appear in the terminal.
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
+
+    if console_json:
+        # In production/containers, structured JSON is often preferred even on stdout
+        console_handler.setFormatter(json_formatter)
+    else:
+        # In local development, colorized text is easier to read
+        console_handler.setFormatter(colored_formatter)
+
     root_logger.addHandler(console_handler)
 
-    # File handler
+    # 2. File Handler
+    # Directs logs to a file, strictly using JSON formatting for machine parsing (e.g., ELK stack).
+    # This ensures that even if the console is set to text, we preserve structured data on disk.
     file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(json_formatter)
     root_logger.addHandler(file_handler)
 
     return root_logger
