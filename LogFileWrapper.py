@@ -40,6 +40,7 @@ class LogFileWrapper:
 
         # Start file monitoring thread
         self.monitor_thread = threading.Thread(
+            name='LogFileMonitor',
             target=self._monitor_file,
             daemon=True
         )
