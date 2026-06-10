@@ -265,6 +265,197 @@ class TaskGenerator(LogGenerator):
             )
 
 
+class LongMessageGenerator(LogGenerator):
+    """Generates logs with extremely long messages to test UI wrapping/scrolling."""
+    module_name = 'stress.long_message'
+
+    _LOREM = (
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt "
+        "ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
+        "ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in "
+        "reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur "
+        "sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id "
+        "est laborum. "
+    )
+
+    def generate_logs(self):
+        style = random.choice(['paragraph', 'url', 'base64', 'json_blob', 'chinese_long'])
+        extra = {'msg_style': style, 'seq': random.randint(1, 999999)}
+
+        if style == 'paragraph':
+            repeat = random.randint(10, 80)
+            msg = f"[PARAGRAPH] {' '.join([self._LOREM] * repeat)}"
+            self.logger.info(msg, extra=extra)
+
+        elif style == 'url':
+            # Very long URL-like string without spaces
+            path_len = random.randint(200, 2000)
+            segments = ''.join(random.choices(
+                'abcdefghijklmnopqrstuvwxyz0123456789-_/=&?',
+                k=path_len
+            ))
+            msg = f"[LONG_URL] https://api.example.com/v1/resource{segments}"
+            self.logger.warning(msg, extra=extra)
+
+        elif style == 'base64':
+            # Simulate a huge base64 payload
+            payload_len = random.randint(300, 3000)
+            b64 = ''.join(random.choices(
+                'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',
+                k=payload_len
+            ))
+            msg = f"[BASE64] data:image/png;base64,{b64}"
+            self.logger.debug(msg, extra=extra)
+
+        elif style == 'json_blob':
+            # Large flattened JSON-like text
+            pairs = [f'"k{i}":"{random.randint(1000,9999)}"' for i in range(random.randint(50, 300))]
+            msg = f"[JSON_BLOB] {{{','.join(pairs)}}}"
+            self.logger.info(msg, extra=extra)
+
+        elif style == 'chinese_long':
+            # Long mixed Chinese-English sentence without natural word breaks
+            chars = (
+                "这是一段非常长的中文日志内容用于测试日志查看器在显示超长文本时的表现情况"
+                "系统需要能够正确处理不换行或自动换行的场景同时保持可读性"
+                "The system should handle long mixed CJK and ASCII content gracefully "
+            )
+            msg = f"[CHINESE_LONG] {chars * random.randint(5, 30)}"
+            self.logger.error(msg, extra=extra)
+
+
+class LargePayloadGenerator(LogGenerator):
+    """Generates logs with a large number of extra fields."""
+    module_name = 'stress.large_payload'
+
+    def generate_logs(self):
+        field_count = random.randint(20, 120)
+        extra = {'field_count': field_count}
+
+        for i in range(field_count):
+            key = f"field_{i:03d}"
+            val_type = random.choice(['int', 'float', 'str', 'bool', 'uuid'])
+            if val_type == 'int':
+                extra[key] = random.randint(0, 999999)
+            elif val_type == 'float':
+                extra[key] = round(random.uniform(0, 10000), 4)
+            elif val_type == 'str':
+                extra[key] = ''.join(random.choices('abcdef0123456789', k=16))
+            elif val_type == 'bool':
+                extra[key] = random.choice([True, False])
+            else:
+                extra[key] = (
+                    f"{random.randint(0,255):02x}{random.randint(0,255):02x}"
+                    f"-{random.randint(0,65535):04x}"
+                )
+
+        msg = f"Bulk payload with {field_count} fields"
+        level = random.choice([logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR])
+        self.logger.log(level, msg, extra=extra)
+
+
+class StackTraceGenerator(LogGenerator):
+    """Simulates multi-line stack-trace style log messages."""
+    module_name = 'stress.stacktrace'
+
+    _TEMPLATES = [
+        (
+            "Traceback (most recent call last):\n"
+            '  File "/app/src/handlers.py", line 142, in process_request\n'
+            "    result = await db.fetch(query, params)\n"
+            '  File "/app/src/db.py", line 88, in fetch\n'
+            "    cursor.execute(sql, bindings)\n"
+            "psycopg2.OperationalError: connection to server at \"10.0.1.15\" failed: Connection refused\n"
+            "\tIs the server running on that host and accepting TCP/IP connections?"
+        ),
+        (
+            "UnhandledPromiseRejectionWarning: Error: Request timeout after 30000ms\n"
+            "    at ClientRequest.<anonymous> (/app/node_modules/got/dist/source/core/index.js:956:65)\n"
+            "    at Object.onceWrapper (events.js:420:28)\n"
+            "    at ClientRequest.emit (events.js:314:20)\n"
+            "    at ClientRequest.EventEmitter.emit (domain.js:483:12)\n"
+            "    at TLSSocket.socketErrorListener (_http_client.js:427:9)"
+        ),
+        (
+            "java.net.SocketTimeoutException: Read timed out\n"
+            "\tat java.base/java.net.SocketInputStream.socketRead0(Native Method)\n"
+            "\tat java.base/java.net.SocketInputStream.socketRead(SocketInputStream.java:115)\n"
+            "\tat java.base/java.net.SocketInputStream.read(SocketInputStream.java:168)\n"
+            "\tat java.base/java.io.BufferedInputStream.fill(BufferedInputStream.java:252)\n"
+            "\tat java.base/java.io.BufferedInputStream.read1(BufferedInputStream.java:292)"
+        ),
+    ]
+
+    def generate_logs(self):
+        template = random.choice(self._TEMPLATES)
+        # Occasionally append a huge repeating suffix to make it extra long
+        if random.random() > 0.7:
+            suffix = "\n... repeated frames ...\n" * random.randint(10, 50)
+            template = template + suffix
+
+        level = random.choice([logging.WARNING, logging.ERROR, logging.CRITICAL])
+        self.logger.log(
+            level,
+            template,
+            extra={
+                'trace_id': f"trace_{random.randint(100000, 999999)}",
+                'service': random.choice(['api-gateway', 'worker', 'scheduler', 'ingestor'])
+            }
+        )
+
+
+class MixedFormatGenerator(LogGenerator):
+    """Generates logs with special characters, unicode, emojis, and mixed languages."""
+    module_name = 'stress.mixed_format'
+
+    _SPECIAL_MSGS = [
+        "User input: <script>alert('xss')</script> — sanitization test",
+        "Path traversal attempt: ../../../etc/passwd blocked",
+        "Binary marker: \x00\x01\x02\x03 EOF sequence detected",
+        "Currency: €100.50, ¥12000, £80.00, ₹5000 processed",
+        "Math: ∫f(x)dx ≈ Σᵢ₌₁ⁿ f(xᵢ)Δx — approximation OK",
+        "Emojis: 🚀🌟🔥💻🐛✅❌⚠️🛡️📊 in log message",
+        "RTL test: مرحبا بالعالم mixed with ASCII text",
+        "Zero-width: a\u200Bb\u200Cc\u200Dd joiner test",
+        "Tabs:\tcol1\tcol2\tcol3\tcol4\tcol5 end",
+        "URL-encoded: %3Cbody%20onload%3D%22hack%28%29%22%3E",
+    ]
+
+    def generate_logs(self):
+        msg = random.choice(self._SPECIAL_MSGS)
+        if random.random() > 0.5:
+            # Occasionally combine multiple special messages into one mega-line
+            msg = " | ".join(random.sample(self._SPECIAL_MSGS, k=random.randint(2, 5)))
+
+        self.logger.info(
+            msg,
+            extra={
+                'format_type': 'special',
+                'unicode_test': True,
+                'payload_hash': ''.join(random.choices('abcdef0123456789', k=32))
+            }
+        )
+
+
+class BurstGenerator(LogGenerator):
+    """Emits short bursts of many log lines to stress the viewer."""
+    module_name = 'stress.burst'
+
+    def generate_logs(self):
+        burst_size = random.randint(20, 200)
+        event_id = f"burst_{random.randint(1000, 9999)}"
+        for i in range(burst_size):
+            self.logger.debug(
+                f"Burst event {event_id} step {i + 1}/{burst_size}",
+                extra={
+                    'burst_id': event_id,
+                    'step': i + 1,
+                    'total': burst_size,
+                    'batch_tag': f"batch_{datetime.now().strftime('%H%M%S')}"
+                }
+            )
+
+
 def run_all_tests(duration_minutes=5):
     """
     Run all test modules for specified duration.
@@ -278,7 +469,11 @@ def run_all_tests(duration_minutes=5):
         extra={
             'test_id': 'log_generation_test_001',
             'duration_minutes': duration_minutes,
-            'modules': ['auth', 'database', 'payment', 'system', 'tasks']
+            'modules': [
+                'auth', 'database', 'payment', 'system', 'tasks',
+                'stress.long_message', 'stress.large_payload', 'stress.stacktrace',
+                'stress.mixed_format', 'stress.burst'
+            ]
         }
     )
 
@@ -288,7 +483,12 @@ def run_all_tests(duration_minutes=5):
         DatabaseGenerator(stop_event),
         PaymentGenerator(stop_event),
         SystemGenerator(stop_event),
-        TaskGenerator(stop_event)
+        TaskGenerator(stop_event),
+        LongMessageGenerator(stop_event),
+        LargePayloadGenerator(stop_event),
+        StackTraceGenerator(stop_event),
+        MixedFormatGenerator(stop_event),
+        BurstGenerator(stop_event),
     ]
 
     # Start all generators in separate threads
