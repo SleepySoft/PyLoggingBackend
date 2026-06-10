@@ -483,6 +483,13 @@
             white-space: nowrap;
         }
 
+        .toolbar-count {
+            font-size: 0.8rem;
+            color: #495057;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
         .toolbar-right {
             display: flex;
             align-items: center;
@@ -857,8 +864,8 @@
                 <!-- 统一工具栏 -->
                 <div class="log-toolbar">
                     <div class="toolbar-left">
-                        <h5 class="toolbar-title"><i class="fas fa-list"></i> Log Entries</h5>
                         <span class="toolbar-status" id="loadStatus">Ready</span>
+                        <span class="toolbar-count" id="mainEntryCount">0 Entries</span>
                     </div>
                     <div class="toolbar-right">
                         <div class="form-check form-switch mb-0">
@@ -882,12 +889,6 @@
                         <thead id="logTableHeader"></thead>
                         <tbody id="logTableBody"></tbody>
                     </table>
-                </div>
-            </div>
-
-            <div class="log-controls">
-                <div>
-                    <span class="text-muted" id="mainEntryCount">0 Entries</span>
                 </div>
             </div>
 
