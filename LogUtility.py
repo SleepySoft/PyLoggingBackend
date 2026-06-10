@@ -74,8 +74,9 @@ def setup_logging(log_file='application.log', console_json=False):
 
     # Remove any existing handlers to prevent duplicate logs or configuration conflicts
     # This is crucial when reloading modules or running in certain IDE environments
-    if root_logger.hasHandlers():
-        root_logger.handlers.clear()
+    for handler in root_logger.handlers[:]:
+        handler.close()
+        root_logger.removeHandler(handler)
 
     # --- Formatter Configuration ---
 
@@ -121,26 +122,34 @@ def backup_and_clean_previous_log_file(
         clean: bool = True):
     logger = logging.getLogger()
 
-    if os.path.exists(log_file):
-        history_dir = back_folder
-        if not os.path.exists(history_dir):
-            os.makedirs(history_dir)
-            logger.info(f"Built log archived dir: {history_dir}")
+    if not os.path.exists(log_file):
+        return
 
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        archived_log_name = f"iis_{timestamp}.log"
-        archived_log_path = os.path.join(history_dir, archived_log_name)
+    abs_log_file = os.path.abspath(log_file)
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler) and handler.baseFilename == abs_log_file:
+            handler.close()
+            logger.removeHandler(handler)
 
-        try:
-            shutil.copy2(log_file, archived_log_path)
-            logger.info(f"log_file log file: {log_file} -> {archived_log_path}")
+    history_dir = back_folder
+    if not os.path.exists(history_dir):
+        os.makedirs(history_dir)
+        logger.info(f"Built log archived dir: {history_dir}")
 
-            if clean:
-                os.remove(log_file)
-                logger.info(f"Removed log file: {log_file}")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    archived_log_name = f"iis_{timestamp}.log"
+    archived_log_path = os.path.join(history_dir, archived_log_name)
 
-        except Exception as e:
-            logger.info(f"Process log file exception: {e}")
+    try:
+        shutil.copy2(log_file, archived_log_path)
+        logger.info(f"Archived log file: {log_file} -> {archived_log_path}")
+
+        if clean:
+            os.remove(log_file)
+            logger.info(f"Removed log file: {log_file}")
+
+    except Exception as e:
+        logger.info(f"Process log file exception: {e}")
 
 
 def limit_logger_level(logger_name: str, level = logging.WARNING):
