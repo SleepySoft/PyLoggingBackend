@@ -654,7 +654,11 @@
             justify-content: space-between;
         }
         /* Module filter header: two-row layout */
-        .module-filter-header {
+        .card.module-panel .card-header.module-filter-header {
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            gap: 0.35rem;
             padding: 0.5rem 0.75rem;
         }
 
@@ -662,7 +666,6 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 0.35rem;
             gap: 0.5rem;
         }
 
