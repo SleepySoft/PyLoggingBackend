@@ -136,6 +136,8 @@
         .logger-name {
             font-weight: 600;
             color: #2c3e50;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         .level-badge {
@@ -261,6 +263,11 @@
 
         .table-section {
             margin-bottom: 20px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .table-header {
@@ -477,20 +484,22 @@
                         <button class="btn btn-success" onclick="applyBatchSettings('thirdParty')">Apply to All</button>
                     </div>
                 </div>
-                <table class="loggers-table">
-                    <thead>
-                        <tr>
-                            <th width="200">Logger Name</th>
-                            <th width="120">Enabled</th>
-                            <th width="150">Current Level</th>
-                            <th>Set Level</th>
-                            <th width="100">Handlers</th>
-                        </tr>
-                    </thead>
-                    <tbody id="thirdPartyTableBody">
-                        <!-- Dynamically populated -->
-                    </tbody>
-                </table>
+                <div class="table-wrapper">
+                    <table class="loggers-table">
+                        <thead>
+                            <tr>
+                                <th width="200">Logger Name</th>
+                                <th width="120">Enabled</th>
+                                <th width="150">Current Level</th>
+                                <th>Set Level</th>
+                                <th width="100">Handlers</th>
+                            </tr>
+                        </thead>
+                        <tbody id="thirdPartyTableBody">
+                            <!-- Dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Project loggers section -->
@@ -528,20 +537,22 @@
                         <button class="btn btn-success" onclick="applyBatchSettings('project')">Apply to All</button>
                     </div>
                 </div>
-                <table class="loggers-table">
-                    <thead>
-                        <tr>
-                            <th width="200">Logger Name</th>
-                            <th width="120">Enabled</th>
-                            <th width="150">Current Level</th>
-                            <th>Set Level</th>
-                            <th width="100">Handlers</th>
-                        </tr>
-                    </thead>
-                    <tbody id="projectTableBody">
-                        <!-- Dynamically populated -->
-                    </tbody>
-                </table>
+                <div class="table-wrapper">
+                    <table class="loggers-table">
+                        <thead>
+                            <tr>
+                                <th width="200">Logger Name</th>
+                                <th width="120">Enabled</th>
+                                <th width="150">Current Level</th>
+                                <th>Set Level</th>
+                                <th width="100">Handlers</th>
+                            </tr>
+                        </thead>
+                        <tbody id="projectTableBody">
+                            <!-- Dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -683,7 +694,7 @@
             // Name cell
             const nameCell = document.createElement('td');
             nameCell.className = 'logger-name';
-            nameCell.style.minWidth = '300px';
+            nameCell.style.minWidth = '200px';
 
             const nameContainer = document.createElement('div');
             nameContainer.className = 'tree-node';
