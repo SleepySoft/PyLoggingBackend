@@ -25,6 +25,7 @@
             display: flex;
             height: 100vh;
             transition: all var(--transition-speed);
+            position: relative;
         }
 
         .sidebar {
@@ -51,6 +52,7 @@
         .module-panel {
             flex: 1 1 auto;
             min-height: 150px;
+            max-height: 420px;
             display: flex;
             flex-direction: column;
             margin-bottom: 0;
@@ -101,6 +103,14 @@
             display: flex;
             align-items: center;
             padding: 2px 0;
+            min-width: 0;
+        }
+
+        .tree-label label {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .tree-label:hover {
@@ -160,8 +170,7 @@
         .toggle-sidebar-btn {
             position: absolute;
             top: 14px;
-            right: -14px;
-            left: auto;
+            left: calc(var(--sidebar-width) - 14px);
             z-index: 1050;
             background: #fff;
             border: 1px solid #dee2e6;
@@ -174,7 +183,7 @@
             justify-content: center;
             cursor: pointer;
             box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-            transition: all 0.25s ease;
+            transition: left 0.3s ease, transform 0.25s ease, box-shadow 0.25s ease;
             font-size: 12px;
             padding: 0;
         }
@@ -185,13 +194,8 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.18);
         }
 
-        .sidebar.collapsed .toggle-sidebar-btn {
-            right: -14px;
-            transform: rotate(180deg);
-        }
-
-        .sidebar.collapsed .toggle-sidebar-btn:hover {
-            transform: rotate(180deg) scale(1.1);
+        .sidebar.collapsed ~ .toggle-sidebar-btn {
+            left: calc(var(--sidebar-collapsed-width) - 14px);
         }
 
         .log-container {
@@ -690,10 +694,6 @@
     <div class="main-container">
         <!-- Left Sidebar -->
         <div class="sidebar" id="sidebar">
-            <button class="toggle-sidebar-btn" onclick="toggleSidebar()" title="Toggle sidebar">
-                <i class="fas fa-chevron-left" id="sidebarIcon"></i>
-            </button>
-
             <!-- 折叠状态下的状态指示器 -->
             <div class="collapsed-status">
                 <span id="collapsedConnectionStatus" class="status-indicator status-connecting">
@@ -842,6 +842,10 @@
                 </div>
             </div>
         </div>
+
+        <button class="toggle-sidebar-btn" onclick="toggleSidebar()" title="Toggle sidebar">
+            <i class="fas fa-chevron-left" id="sidebarIcon"></i>
+        </button>
 
         <!-- Main Log Content -->
         <div class="log-container">
