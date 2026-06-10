@@ -1934,9 +1934,9 @@
             });
             
             // Update the displayed entry count
-            // totalEntries = visibleCount;
-            document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
-            document.getElementById('mainEntryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
+            totalEntries = visibleCount;
+            document.getElementById('entryCount').textContent = `${visibleCount.toLocaleString()} Entries`;
+            document.getElementById('mainEntryCount').textContent = `${visibleCount.toLocaleString()} Entries`;
         }
 
         function applyFilters() {
