@@ -497,6 +497,17 @@
             white-space: nowrap;
         }
 
+        .toolbar-debug {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.75rem;
+            color: #495057;
+            background: #f1f3f5;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.375rem;
+            white-space: nowrap;
+            letter-spacing: -0.2px;
+        }
+
         .toolbar-pending {
             font-size: 0.8rem;
             color: #0d6efd;
@@ -889,6 +900,7 @@
                             <span id="statusText">Connecting</span>
                         </span>
                         <span class="toolbar-count" id="entryCount">0 Entries</span>
+                        <span class="toolbar-debug" id="debugInfo" title="Raw / Hot / Offline / DOM visible / Display range / Continuity">—</span>
                     </div>
                     <div class="toolbar-right">
                         <span class="toolbar-pending" id="pendingLogsHint" style="display:none;">
@@ -1125,6 +1137,7 @@
             }
 
             syncViewModeUI();
+            updateDebugInfo();
             console.log('Switched to LIVE mode');
         }
 
@@ -1610,6 +1623,8 @@
             if (visible.length > 0) {
                 mergeToHotBuffer(visible);
             }
+
+            updateDebugInfo();
         }
 
         function mergeToRawCache(logs) {
@@ -1910,6 +1925,31 @@
             });
             totalEntries = visibleCount;
             document.getElementById('entryCount').textContent = `${visibleCount.toLocaleString()} Entries`;
+
+            updateDebugInfo();
+        }
+
+        // Render cache debug info in the toolbar.
+        function updateDebugInfo() {
+            const debugEl = document.getElementById('debugInfo');
+            if (!debugEl) return;
+
+            const rawCount = rawCache.length;
+            const hotCount = hotBuffer.length;
+            const offlineSegs = offlineBuffer.segments.length;
+            const offlineTotal = offlineBuffer.totalSize;
+            const continuous = isCacheContinuous();
+            const allRows = logTableBody.querySelectorAll('tr[data-log-id]');
+            let visibleDom = 0;
+            allRows.forEach(row => { if (row.style.display !== 'none') visibleDom++; });
+
+            debugEl.textContent =
+                `Raw:${rawCount.toLocaleString()} ` +
+                `Hot:${hotCount.toLocaleString()} ` +
+                `Off:${offlineSegs}/${offlineTotal.toLocaleString()} ` +
+                `DOM:${visibleDom}/${allRows.length} ` +
+                `Range:[${displayMinId ?? '-'},${displayMaxId ?? '-'}] ` +
+                `${continuous ? 'Cont✓' : 'Cont✗'}`;
         }
 
         // **rewritten, more optimized code**
@@ -2326,6 +2366,8 @@
             // that arrive during the brief disconnection window.
             // If backend-level filtering is ever added, the reconnect logic
             // should be reintroduced with a proper filter parameter.
+
+            updateDebugInfo();
         }
 
         // Update selected levels from checkboxes
