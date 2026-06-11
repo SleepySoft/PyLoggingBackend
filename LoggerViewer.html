@@ -952,6 +952,10 @@
         // In live mode, DOM rows are pruned to this limit to keep rendering fast.
         const MAX_LOG_LIMIT = 5000;
 
+        // In history mode, DOM is allowed to grow larger so users can browse freely,
+        // but still capped to prevent the browser from freezing after hours of use.
+        const HISTORY_DOM_LIMIT = 30000;
+
         // Cache bounds: soft limit for total memory, hot tail always retained.
         const CACHE_SOFT_LIMIT = 20000; // ~10 MB at 500 bytes/log
         const HOT_CACHE_SIZE = 5000;    // newest logs never pruned
@@ -1098,10 +1102,16 @@
 
         function enterLiveMode(options = {}) {
             if (viewMode === 'live') return;
+
+            // Safety: if the DOM has grown huge in history mode, force a full reset
+            // instead of incremental append/delete, which would still be very heavy.
+            const currentRows = logTableBody.querySelectorAll('tr[data-log-id]').length;
+            const shouldForceReset = options.forceReset || currentRows > MAX_LOG_LIMIT * 2;
+
             viewMode = 'live';
             autoScrollEnabled = true;
 
-            if (options.forceReset) {
+            if (shouldForceReset) {
                 // Non-linear jump (e.g. clicked Auto Scroll after deep history browsing).
                 // Reset DOM to the most recent MAX_LOG_LIMIT rows to avoid
                 // rendering thousands of accumulated logs at once.
@@ -1414,16 +1424,25 @@
             tbody.innerHTML = '';
             logs.forEach(log => addLogRow(log));
             ensureScrollObserver();
+            // Keep display boundaries in sync so callers don't have to.
+            if (logs.length > 0) {
+                displayMinId = logs[0]._id;
+                displayMaxId = logs[logs.length - 1]._id;
+            } else {
+                displayMinId = null;
+                displayMaxId = null;
+            }
         }
 
         function prependTableRows(logs) {
             const tbody = logTableBody;
+            // Batch DOM insertions with DocumentFragment to avoid a reflow per row.
+            const fragment = document.createDocumentFragment();
             logs
+                .slice()                    // copy so we don't mutate the caller's array
                 .reverse()                  // insert oldest first to keep order correct
-                .forEach(log => {
-                    const tr = createLogRow(log);
-                    tbody.insertBefore(tr, tbody.firstChild);
-                });
+                .forEach(log => fragment.appendChild(createLogRow(log)));
+            tbody.insertBefore(fragment, tbody.firstChild);
             ensureScrollObserver();
         }
 
@@ -1693,6 +1712,20 @@
                         prependTableRows(logsToPrepend);
                         const afterHeight = logTableBody.scrollHeight;
                         document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
+
+                        // In history mode the user is browsing old history.
+                        // If the DOM exceeds the limit, drop the newest rows (tail)
+                        // since they are off-screen and safely cached in the hot tail.
+                        if (viewMode === 'history') {
+                            const rows = logTableBody.querySelectorAll('tr[data-log-id]');
+                            const excess = rows.length - HISTORY_DOM_LIMIT;
+                            if (excess > 0) {
+                                for (let i = 0; i < excess; i++) {
+                                    const idx = rows.length - 1 - i;
+                                    if (rows[idx]) rows[idx].remove();
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1702,18 +1735,30 @@
                     console.log("Render log table - Tail ", logsToAppend.length);
 
                     if (logsToAppend.length > 0) {
-                        const wasNearBottom = isNearBottom;
-                        logsToAppend.forEach(addLogRow);
+                        // In history mode, if thousands of logs have accumulated while the
+                        // user was away, a non-linear reset is much faster (and safer) than
+                        // appending row-by-row, which would freeze the UI.
+                        if (viewMode === 'history' && logsToAppend.length > MAX_LOG_LIMIT) {
+                            enterLiveMode({ forceReset: true });
+                            return;
+                        }
 
-                        // In live mode, prune oldest rows so the DOM stays a
-                        // sliding window rather than an ever-growing list.
-                        if (viewMode === 'live') {
-                            const rows = logTableBody.querySelectorAll('tr[data-log-id]');
-                            const excess = rows.length - MAX_LOG_LIMIT;
-                            if (excess > 0) {
-                                for (let i = 0; i < excess; i++) {
-                                    if (rows[i]) rows[i].remove();
-                                }
+                        const wasNearBottom = isNearBottom;
+
+                        // Batch DOM insertions with DocumentFragment to avoid a reflow per row.
+                        const fragment = document.createDocumentFragment();
+                        logsToAppend.forEach(log => fragment.appendChild(createLogRow(log)));
+                        logTableBody.appendChild(fragment);
+
+                        // Live mode: hard sliding window.
+                        // History mode: soft ceiling — drop oldest rows (head)
+                        // since the user is scrolling down toward new logs.
+                        const domLimit = viewMode === 'live' ? MAX_LOG_LIMIT : HISTORY_DOM_LIMIT;
+                        const rows = logTableBody.querySelectorAll('tr[data-log-id]');
+                        const excess = rows.length - domLimit;
+                        if (excess > 0) {
+                            for (let i = 0; i < excess; i++) {
+                                if (rows[i]) rows[i].remove();
                             }
                         }
 
