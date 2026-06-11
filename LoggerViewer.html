@@ -497,6 +497,32 @@
             white-space: nowrap;
         }
 
+        .toolbar-pending {
+            font-size: 0.8rem;
+            color: #0d6efd;
+            background: #e7f1ff;
+            padding: 0.25rem 0.6rem;
+            border-radius: 0.375rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            white-space: nowrap;
+        }
+
+        .toolbar-pending button {
+            background: none;
+            border: none;
+            color: #0d6efd;
+            font-weight: 600;
+            padding: 0;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .toolbar-pending button:hover {
+            text-decoration: underline;
+        }
+
         .toolbar-right {
             display: flex;
             align-items: center;
@@ -865,7 +891,11 @@
                         <span class="toolbar-count" id="entryCount">0 Entries</span>
                     </div>
                     <div class="toolbar-right">
-                        <button id="autoScrollBtn" class="auto-scroll-btn active" title="自动滚动到底部">
+                        <span class="toolbar-pending" id="pendingLogsHint" style="display:none;">
+                            <span id="pendingCount">0</span> new
+                            <button onclick="enterLiveMode()">↓ Jump</button>
+                        </span>
+                        <button id="autoScrollBtn" class="auto-scroll-btn active" title="Auto scroll enabled">
                             <i class="fas fa-arrow-down"></i>
                             <span>Auto Scroll</span>
                         </button>
@@ -915,6 +945,10 @@
         let lastScrollTop = 0;      // 上一次滚动条位置
         let isScrollingUp = false;  // 方向
         let logTableBody = null
+
+        // View mode state machine: 'live' | 'history'
+        let viewMode = 'live';
+        let pendingNewLogs = []; // New logs buffered while in history mode
 
         const MAX_LOG_LIMIT = 5000; // Maximum number of logs to keep in cache and display
 
@@ -1018,19 +1052,72 @@
             const scrollTop = container.scrollTop;
             const scrollHeight = container.scrollHeight;
             const clientHeight = container.clientHeight;
+            const scrollBottom = scrollHeight - scrollTop - clientHeight;
+
             isScrollingUp = scrollTop < lastScrollTop;
             lastScrollTop = scrollTop;
-            // 如果距离底部小于100px，则认为接近底部
-            isNearBottom = (scrollHeight - scrollTop - clientHeight) < 100;
-            // 显示或隐藏"滚动到底部"按钮
+            //  tighter threshold for "at bottom", looser for "left bottom"
+            isNearBottom = scrollBottom < 30;
+
+            // Auto mode switching
+            if (viewMode === 'live' && scrollBottom > 150) {
+                enterHistoryMode();
+            } else if (viewMode === 'history' && scrollBottom <= 30) {
+                enterLiveMode();
+            }
+
+            // Show/hide scroll-to-bottom button
             const scrollButton = document.getElementById('scrollToBottom');
             if (isNearBottom) {
                 scrollButton.classList.remove('visible');
-                if (autoScrollEnabled) {
-                    scrollToBottom();
-                }
             } else {
                 scrollButton.classList.add('visible');
+            }
+        }
+
+        function enterHistoryMode() {
+            if (viewMode === 'history') return;
+            viewMode = 'history';
+            autoScrollEnabled = false;
+            syncViewModeUI();
+            console.log('Switched to HISTORY mode');
+        }
+
+        function enterLiveMode() {
+            if (viewMode === 'live') return;
+            viewMode = 'live';
+            autoScrollEnabled = true;
+
+            // Render all buffered new logs at once
+            if (pendingNewLogs.length > 0) {
+                const logs = pendingNewLogs.splice(0);
+                mergeLogsToCache(logs);
+                updateDisplayFromCache();
+                scrollToBottom();
+            }
+
+            syncViewModeUI();
+            console.log('Switched to LIVE mode');
+        }
+
+        function syncViewModeUI() {
+            const btn = document.getElementById('autoScrollBtn');
+            const hint = document.getElementById('pendingLogsHint');
+            const count = document.getElementById('pendingCount');
+
+            if (viewMode === 'live') {
+                btn.classList.add('active');
+                btn.title = "Auto scroll enabled";
+                if (hint) hint.style.display = 'none';
+            } else {
+                btn.classList.remove('active');
+                btn.title = "In history mode — click to resume live";
+                if (hint && pendingNewLogs.length > 0) {
+                    hint.style.display = 'inline-flex';
+                    if (count) count.textContent = pendingNewLogs.length;
+                } else if (hint) {
+                    hint.style.display = 'none';
+                }
             }
         }
 
@@ -1046,17 +1133,16 @@
             container.scrollTop = container.scrollHeight;
         }
 
-        // 切换自动滚动
+        // Toggle auto-scroll / resume live
         function toggleAutoScroll() {
-            autoScrollEnabled = !autoScrollEnabled;
-            const button = document.getElementById('autoScrollBtn');
-            if (autoScrollEnabled) {
-                button.classList.add('active');
-                button.title = "自动滚动已启用";
-                scrollToBottom();
+            if (viewMode === 'history') {
+                enterLiveMode();
             } else {
-                button.classList.remove('active');
-                button.title = "自动滚动已禁用";
+                autoScrollEnabled = !autoScrollEnabled;
+                syncViewModeUI();
+                if (autoScrollEnabled) {
+                    scrollToBottom();
+                }
             }
         }
 
@@ -1381,15 +1467,18 @@
             return tr;
         }
 
-        // --- MODIFIED: `addLogRow` now enforces the display limit ---
+        // --- MODIFIED: `addLogRow` enforces display limit only in live mode ---
         function addLogRow(log) {
             const tbody = logTableBody;
 
-            // Enforce display limit by removing the oldest log from the top
-            while (tbody.querySelectorAll('tr[data-log-id]').length >= MAX_LOG_LIMIT) {
-                const firstRow = tbody.querySelector('tr[data-log-id]');
-                if (firstRow) firstRow.remove();
-                else break;
+            // In live mode, enforce display limit by removing the oldest log from the top.
+            // In history mode, preserve all visible rows so the user can browse freely.
+            if (viewMode === 'live') {
+                while (tbody.querySelectorAll('tr[data-log-id]').length >= MAX_LOG_LIMIT) {
+                    const firstRow = tbody.querySelector('tr[data-log-id]');
+                    if (firstRow) firstRow.remove();
+                    else break;
+                }
             }
 
             tbody.appendChild(createLogRow(log));
@@ -1474,8 +1563,9 @@
                 logCache = logCache.concat(uniqueNewLogs).sort((a, b) => a._id - b._id);
             }
 
-            // Enforce cache size limit by removing the oldest logs
-            if (logCache.length > MAX_LOG_LIMIT) {
+            // Enforce cache size limit only in live mode.
+            // In history mode we keep the cache intact so the user can scroll back freely.
+            if (viewMode === 'live' && logCache.length > MAX_LOG_LIMIT) {
                 logCache.splice(0, logCache.length - MAX_LOG_LIMIT);
             }
 
@@ -1712,11 +1802,15 @@
                     const logs = Array.isArray(raw) ? raw : [raw];
 
                     if (logs.length > 0) {
-                         // 将新日志合并到缓存
-                        mergeLogsToCache(logs);
-                        // 从缓存更新显示
-                        updateDisplayFromCache();
-                        if (autoScrollEnabled && isNearBottom) scrollToBottom();
+                        if (viewMode === 'live') {
+                            mergeLogsToCache(logs);
+                            updateDisplayFromCache();
+                            if (autoScrollEnabled && isNearBottom) scrollToBottom();
+                        } else {
+                            // History mode: buffer new logs without rendering
+                            pendingNewLogs.push(...logs);
+                            syncViewModeUI();
+                        }
                     }
 
                 } catch (e) { console.error('SSE parse error', e); }
