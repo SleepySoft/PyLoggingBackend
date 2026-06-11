@@ -950,9 +950,11 @@
         let viewMode = 'live';
 
         // In live mode, DOM rows are pruned to this limit to keep rendering fast.
-        // Cache (logCache) is NOT bounded by this; old logs are kept so the user
-        // can scroll back freely in history mode.
         const MAX_LOG_LIMIT = 5000;
+
+        // Cache bounds: soft limit for total memory, hot tail always retained.
+        const CACHE_SOFT_LIMIT = 20000; // ~10 MB at 500 bytes/log
+        const HOT_CACHE_SIZE = 5000;    // newest logs never pruned
 
         // column configuration management
         let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
@@ -1094,15 +1096,21 @@
             console.log('Switched to HISTORY mode');
         }
 
-        function enterLiveMode() {
+        function enterLiveMode(options = {}) {
             if (viewMode === 'live') return;
             viewMode = 'live';
             autoScrollEnabled = true;
 
-            // Ensure any logs that arrived while in history mode are reflected
-            // in the display.  Because the user may have already scrolled part-way
-            // down and rendered them incrementally, this is usually a no-op.
-            updateDisplayFromCache();
+            if (options.forceReset) {
+                // Non-linear jump (e.g. clicked Auto Scroll after deep history browsing).
+                // Reset DOM to the most recent MAX_LOG_LIMIT rows to avoid
+                // rendering thousands of accumulated logs at once.
+                const recentLogs = logCache.slice(-MAX_LOG_LIMIT);
+                renderTableBody(recentLogs);
+            } else {
+                // Natural scroll to bottom: incremental render of anything missing.
+                updateDisplayFromCache();
+            }
 
             syncViewModeUI();
             console.log('Switched to LIVE mode');
@@ -1138,7 +1146,9 @@
         // Toggle auto-scroll / resume live
         function toggleAutoScroll() {
             if (viewMode === 'history') {
-                enterLiveMode();
+                // Non-linear jump: force reset to latest logs
+                enterLiveMode({ forceReset: true });
+                scrollToBottom();
             } else {
                 autoScrollEnabled = !autoScrollEnabled;
                 syncViewModeUI();
@@ -1553,11 +1563,7 @@
                 logCache = logCache.concat(uniqueNewLogs).sort((a, b) => a._id - b._id);
             }
 
-            // Cache is intentionally NOT pruned here.
             // The cache is the "river" that the display window slides over.
-            // Old logs are kept so the user can scroll back freely in history mode.
-            // Only the live-mode DOM display is bounded by MAX_LOG_LIMIT.
-
             // Rebuild the lookup map and update boundaries
             logCacheMap.clear();
             if (logCache.length > 0) {
@@ -1567,6 +1573,25 @@
             } else {
                 cacheMinId = null;
                 cacheMaxId = null;
+            }
+
+            // Prune oldest logs to cap memory, but always keep the hot tail.
+            pruneCache();
+        }
+
+        function pruneCache() {
+            if (logCache.length <= CACHE_SOFT_LIMIT) return;
+
+            const excess = logCache.length - CACHE_SOFT_LIMIT;
+            const safeToDelete = Math.max(0, logCache.length - HOT_CACHE_SIZE);
+            const deleteCount = Math.min(excess, safeToDelete);
+
+            if (deleteCount > 0) {
+                logCache.splice(0, deleteCount);
+                logCacheMap.clear();
+                logCache.forEach(log => logCacheMap.set(log._id, log));
+                cacheMinId = logCache[0]._id;
+                cacheMaxId = logCache[logCache.length - 1]._id;
             }
         }
 
