@@ -948,9 +948,11 @@
 
         // View mode state machine: 'live' | 'history'
         let viewMode = 'live';
-        let pendingNewLogs = []; // New logs buffered while in history mode
 
-        const MAX_LOG_LIMIT = 5000; // Maximum number of logs to keep in cache and display
+        // In live mode, DOM rows are pruned to this limit to keep rendering fast.
+        // Cache (logCache) is NOT bounded by this; old logs are kept so the user
+        // can scroll back freely in history mode.
+        const MAX_LOG_LIMIT = 5000;
 
         // column configuration management
         let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
@@ -1019,11 +1021,14 @@
             };
             observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    // --- ADDED: Check if the display limit has been reached. ---
-                    const displayedCount = logTableBody.querySelectorAll('tr[data-log-id]').length;
-                    if (displayedCount >= MAX_LOG_LIMIT) {
-                        console.log("Display limit reached, upward scroll is disabled.");
-                        return; // Do not trigger load more if the display is full.
+                    // In live mode we cap the DOM size; in history mode the user
+                    // should be free to load and browse as much history as desired.
+                    if (viewMode === 'live') {
+                        const displayedCount = logTableBody.querySelectorAll('tr[data-log-id]').length;
+                        if (displayedCount >= MAX_LOG_LIMIT) {
+                            console.log("Live mode display limit reached, upward scroll is disabled.");
+                            return;
+                        }
                     }
 
                     // Check if there are older logs in the cache that are not displayed
@@ -1056,7 +1061,6 @@
 
             isScrollingUp = scrollTop < lastScrollTop;
             lastScrollTop = scrollTop;
-            //  tighter threshold for "at bottom", looser for "left bottom"
             isNearBottom = scrollBottom < 30;
 
             // Auto mode switching
@@ -1064,6 +1068,13 @@
                 enterHistoryMode();
             } else if (viewMode === 'history' && scrollBottom <= 30) {
                 enterLiveMode();
+            }
+
+            // While in history mode and scrolling down near the bottom,
+            // incrementally render newly-arrived logs from cache so the
+            // user can browse smoothly back toward the present.
+            if (viewMode === 'history' && !isScrollingUp && scrollBottom < 300) {
+                updateDisplayFromCache();
             }
 
             // Show/hide scroll-to-bottom button
@@ -1088,13 +1099,10 @@
             viewMode = 'live';
             autoScrollEnabled = true;
 
-            // Render all buffered new logs at once
-            if (pendingNewLogs.length > 0) {
-                const logs = pendingNewLogs.splice(0);
-                mergeLogsToCache(logs);
-                updateDisplayFromCache();
-                scrollToBottom();
-            }
+            // Ensure any logs that arrived while in history mode are reflected
+            // in the display.  Because the user may have already scrolled part-way
+            // down and rendered them incrementally, this is usually a no-op.
+            updateDisplayFromCache();
 
             syncViewModeUI();
             console.log('Switched to LIVE mode');
@@ -1103,7 +1111,6 @@
         function syncViewModeUI() {
             const btn = document.getElementById('autoScrollBtn');
             const hint = document.getElementById('pendingLogsHint');
-            const count = document.getElementById('pendingCount');
 
             if (viewMode === 'live') {
                 btn.classList.add('active');
@@ -1112,12 +1119,7 @@
             } else {
                 btn.classList.remove('active');
                 btn.title = "In history mode — click to resume live";
-                if (hint && pendingNewLogs.length > 0) {
-                    hint.style.display = 'inline-flex';
-                    if (count) count.textContent = pendingNewLogs.length;
-                } else if (hint) {
-                    hint.style.display = 'none';
-                }
+                if (hint) hint.style.display = 'none';
             }
         }
 
@@ -1467,20 +1469,8 @@
             return tr;
         }
 
-        // --- MODIFIED: `addLogRow` enforces display limit only in live mode ---
         function addLogRow(log) {
             const tbody = logTableBody;
-
-            // In live mode, enforce display limit by removing the oldest log from the top.
-            // In history mode, preserve all visible rows so the user can browse freely.
-            if (viewMode === 'live') {
-                while (tbody.querySelectorAll('tr[data-log-id]').length >= MAX_LOG_LIMIT) {
-                    const firstRow = tbody.querySelector('tr[data-log-id]');
-                    if (firstRow) firstRow.remove();
-                    else break;
-                }
-            }
-
             tbody.appendChild(createLogRow(log));
         }
 
@@ -1563,11 +1553,10 @@
                 logCache = logCache.concat(uniqueNewLogs).sort((a, b) => a._id - b._id);
             }
 
-            // Enforce cache size limit only in live mode.
-            // In history mode we keep the cache intact so the user can scroll back freely.
-            if (viewMode === 'live' && logCache.length > MAX_LOG_LIMIT) {
-                logCache.splice(0, logCache.length - MAX_LOG_LIMIT);
-            }
+            // Cache is intentionally NOT pruned here.
+            // The cache is the "river" that the display window slides over.
+            // Old logs are kept so the user can scroll back freely in history mode.
+            // Only the live-mode DOM display is bounded by MAX_LOG_LIMIT.
 
             // Rebuild the lookup map and update boundaries
             logCacheMap.clear();
@@ -1690,6 +1679,19 @@
                     if (logsToAppend.length > 0) {
                         const wasNearBottom = isNearBottom;
                         logsToAppend.forEach(addLogRow);
+
+                        // In live mode, prune oldest rows so the DOM stays a
+                        // sliding window rather than an ever-growing list.
+                        if (viewMode === 'live') {
+                            const rows = logTableBody.querySelectorAll('tr[data-log-id]');
+                            const excess = rows.length - MAX_LOG_LIMIT;
+                            if (excess > 0) {
+                                for (let i = 0; i < excess; i++) {
+                                    if (rows[i]) rows[i].remove();
+                                }
+                            }
+                        }
+
                         if (autoScrollEnabled && wasNearBottom) {
                             scrollToBottom();
                         }
@@ -1802,15 +1804,13 @@
                     const logs = Array.isArray(raw) ? raw : [raw];
 
                     if (logs.length > 0) {
+                        mergeLogsToCache(logs);
                         if (viewMode === 'live') {
-                            mergeLogsToCache(logs);
                             updateDisplayFromCache();
                             if (autoScrollEnabled && isNearBottom) scrollToBottom();
-                        } else {
-                            // History mode: buffer new logs without rendering
-                            pendingNewLogs.push(...logs);
-                            syncViewModeUI();
                         }
+                        // In history mode new logs are silently merged into the cache.
+                        // They are rendered incrementally as the user scrolls back down.
                     }
 
                 } catch (e) { console.error('SSE parse error', e); }
