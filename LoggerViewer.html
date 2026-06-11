@@ -60,29 +60,29 @@
         }
         .module-panel .card-body {
             flex: 1 1 auto;
-            display: flex;           /* 让 body 也成为 flex 容器 */
+            display: flex;           /* make body a flex container too */
             flex-direction: column;
             padding: 0;
             overflow: hidden;
         }
         .module-tree {
-            flex: 1 1 auto;          /* 占满 body 高度 */
+            flex: 1 1 auto;          /* fill body height */
             overflow-y: auto;
             padding: .75rem;
             border: none;
         }
 
-        /* 4. 真正的折叠动画 */
+        /* 4. collapse/expand animation */
         .tree-children {
           overflow: hidden;
           transition: max-height .25s ease-out;
-          max-height: 0;                 /* 收起时 */
+          max-height: 0;                 /* collapsed */
         }
         .tree-children.expanded {
-          max-height: 2000px;            /* 展开时，足够大即可 */
+          max-height: 2000px;            /* expanded, large enough */
         }
 
-        /* 5. 三角旋转 */
+        /* 5. chevron rotation */
         .tree-toggle {
           display: inline-block;
           width: 1rem;
@@ -144,19 +144,19 @@
             margin-right: 5px;
         }
 
-        /* 1. 让“模块”这张 card 占满侧边栏剩余空间 */
-        .card.module-panel {              /* 给 Module Panel 的 card 加这个类 */
-            flex: 1 1 0;                   /* 关键：占满剩余高度 */
+        /* 1. make the module card fill remaining sidebar space */
+        .card.module-panel {              /* add this class to the module panel card */
+            flex: 1 1 0;                   /* key: fill remaining height */
             display: flex;
             flex-direction: column;
-            margin-bottom: 0;              /* 去掉默认下边距，避免撑出滚动条 */
+            margin-bottom: 0;              /* remove default margin to avoid extra scrollbar */
         }
 
-        /* 2. 让 card-body 继续把高度传递给内部 */
+        /* 2. let card-body pass height down to children */
         .card.module-panel .card-body {
-            flex: 1 1 0;                   /* 继续把剩余高度吃满 */
-            padding: 0;                    /* 滚动条贴边，视觉更整齐 */
-            overflow: hidden;              /* 只让内部 tree 滚 */
+            flex: 1 1 0;                   /* continue filling remaining height */
+            padding: 0;                    /* scrollbar flush to edge for cleaner look */
+            overflow: hidden;              /* only let inner tree scroll */
         }
 
         .sidebar.collapsed {
@@ -239,7 +239,7 @@
         }
 
         .log-table .timestamp-cell {
-            white-space: nowrap; /* 强制不换行 */
+            white-space: nowrap; /* prevent wrapping */
         }
 
         .module {
@@ -415,7 +415,7 @@
             opacity: 1;
         }
 
-        /* 修复状态指示器布局 */
+        /* fix status indicator layout */
         .status-container {
             display: flex;
             align-items: center;
@@ -445,7 +445,7 @@
             height: 6px;
         }
 
-        /* 表头编辑器样式 */
+        /* header editor styles */
         .log-toolbar {
             display: flex;
             justify-content: space-between;
@@ -633,7 +633,7 @@
             -webkit-overflow-scrolling: touch;
         }
 
-        /* 修复列选择器滚动问题 */
+        /* fix column selector scroll */
         #columnList {
             overflow-y: auto;
             max-height: 300px;
@@ -641,7 +641,7 @@
             padding-right: 5px;
         }
 
-        /* 自定义滚动条 */
+        /* custom scrollbar */
         #columnList::-webkit-scrollbar {
             width: 8px;
         }
@@ -672,7 +672,7 @@
             border-top: 1px solid #eee;
         }
 
-        /* 优化整体布局 */
+        /* optimize overall layout */
         .card {
             border-radius: 8px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
@@ -737,7 +737,7 @@
     <div class="main-container">
         <!-- Left Sidebar -->
         <div class="sidebar" id="sidebar">
-            <!-- 折叠状态下的状态指示器 -->
+            <!-- collapsed state status indicator -->
             <div class="collapsed-status">
                 <span id="collapsedConnectionStatus" class="status-indicator status-connecting">
                     <span class="dot"></span>
@@ -780,7 +780,7 @@
                             </div>
                         </div>
 
-                        <!-- 模块树配置区域 -->
+                        <!-- module tree configuration panel -->
                         <div class="card mb-3">
                             <div class="card-header bg-info text-white">
                                 <i class="fas fa-cog"></i> Module Configuration
@@ -878,9 +878,9 @@
 
         <!-- Main Log Content -->
         <div class="log-container">
-            <!-- 日志显示区 -->
+            <!-- log display area -->
             <div class="log-entries-container">
-                <!-- 统一工具栏 -->
+                <!-- unified toolbar -->
                 <div class="log-toolbar">
                     <div class="toolbar-left">
                         <span class="toolbar-status" id="loadStatus">Ready</span>
@@ -914,7 +914,7 @@
                     </div>
                 </div>
 
-                <!-- 表格 -->
+                <!-- table -->
                 <div class="table-responsive">
                     <table class="log-table">
                         <thead id="logTableHeader"></thead>
@@ -923,7 +923,7 @@
                 </div>
             </div>
 
-            <div id="scrollToBottom" class="scroll-to-bottom" title="滚动到底部">
+            <div id="scrollToBottom" class="scroll-to-bottom" title="Scroll to bottom">
                 <i class="fas fa-arrow-down"></i>
             </div>
         </div>
@@ -942,8 +942,8 @@
         let isNearBottom = true;
         let lastReceivedId = -1; // Track last received log ID for SSE
         let moduleHierarchy = {}; // Store module hierarchy data
-        let lastScrollTop = 0;      // 上一次滚动条位置
-        let isScrollingUp = false;  // 方向
+        let lastScrollTop = 0;      // last scrollbar position
+        let isScrollingUp = false;  // scroll direction
         let logTableBody = null
 
         // View mode state machine: 'live' | 'history'
@@ -952,7 +952,7 @@
 
         const MAX_LOG_LIMIT = 5000; // Maximum number of logs to keep in cache and display
 
-        // 列配置管理
+        // column configuration management
         let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
         let visibleColumns = ['asctime', 'levelname', 'module', 'message'];
         let columnOrder = ['asctime', 'levelname', 'module', 'message'];
@@ -984,12 +984,12 @@
             //    applyButton.addEventListener('click', applyFilters);
             //}
 
-            // 自动滚动按钮监听
+            // auto-scroll button listener
             document.getElementById('autoScrollBtn').addEventListener('click', toggleAutoScroll);
-            // 滚动到底部按钮监听
+            // scroll-to-bottom button listener
             document.getElementById('scrollToBottom').addEventListener('click', scrollToBottom);
             document.getElementById('applyColumnBtn').addEventListener('click', applyColumnSettings);
-            // 监听滚动事件以检测是否接近底部
+            // scroll listener to detect nearness to bottom
             document.querySelector('.log-entries-container').addEventListener('scroll', checkScrollPosition);
             // Auto-refresh toggle
             document.getElementById('autoRefresh').addEventListener('change', function() {
@@ -1030,12 +1030,12 @@
                     const oldestDisplayedLog = logCache.find(log => log._id === displayMinId);
                     const canLoadMoreFromCache = oldestDisplayedLog && logCache.indexOf(oldestDisplayedLog) > 0;
 
-                    if (entry.isIntersecting          // 元素进入视口
-                        && !isLoading                 // 空闲
-                        && isScrollingUp              // 关键：必须是向上滚
-                        && (hasMoreLogs || canLoadMoreFromCache) // 还有更早的或缓存里有
+                    if (entry.isIntersecting          // element enters viewport
+                        && !isLoading                 // not loading
+                        && isScrollingUp              // must be scrolling up
+                        && (hasMoreLogs || canLoadMoreFromCache) // older logs or cache available
                     ) {
-                        loadMoreLogs();               // 拉旧数据
+                        loadMoreLogs();               // fetch older logs
                     }
                 });
             }, options);
@@ -1043,7 +1043,7 @@
             if (obsEl) {
                 observer.observe(obsEl);
             } else {
-                console.warn('scrollObserver 仍不存在，观测失败！');
+                console.warn('scrollObserver missing, observation failed!');
             }
         }
 
@@ -1121,13 +1121,13 @@
             }
         }
 
-        // 设置滚动到底部按钮
+        // setup scroll-to-bottom button
         function setupScrollToBottom() {
-            // 初始检查位置
+            // initial position check
             checkScrollPosition();
         }
 
-        // 滚动到底部
+        // scroll to bottom
         function scrollToBottom() {
             const container = document.querySelector('.log-entries-container');
             container.scrollTop = container.scrollHeight;
@@ -1146,7 +1146,7 @@
             }
         }
 
-        // 更新连接状态
+        // update connection status
         function updateConnectionStatus(status) {
             const statusElement = document.getElementById('connectionStatus');
             const collapsedStatusElement = document.getElementById('collapsedConnectionStatus');
@@ -1233,9 +1233,9 @@
                 });
         }
 
-        // 初始化表头编辑器
+        // initialize header editor
         function initHeaderEditor() {
-            // 从localStorage加载保存的设置
+            // load saved settings from localStorage
             const savedSettings = localStorage.getItem('logViewerColumnSettings');
             if (savedSettings) {
                 try {
@@ -1246,7 +1246,7 @@
                     console.error('Error loading column settings:', e);
                 }
             }
-            // 设置表头编辑器按钮点击事件
+            // setup header editor button click
             document.getElementById('headerEditorBtn').addEventListener('click', function(e) {
                 e.stopPropagation();
                 const dropdown = document.getElementById('headerEditorDropdown');
@@ -1256,7 +1256,7 @@
                     setupColumnEventDelegation();
                 }
             });
-            // 点击页面其他区域关闭下拉框
+            // click outside to close dropdown
             document.addEventListener('click', function(e) {
                 const dropdown = document.getElementById('headerEditorDropdown');
                 if (dropdown.classList.contains('show') &&
@@ -1265,29 +1265,29 @@
                     dropdown.classList.remove('show');
                 }
             });
-            // 初始化表头
+            // initialize table header
             renderTableHeader();
         }
 
         function renderColumnEditor() {
             const columnList = document.getElementById('columnList');
             columnList.innerHTML = '';
-            // 1. 按现有顺序把 columnOrder 里“还活着”的字段先摆好
+            // 1. place columns still present in columnOrder first“still present” first
             const existInOrder = columnOrder.filter(c => availableColumns.includes(c));
-            // 2. 把 availableColumns 里“从未出现过”的新字段追加到末尾
+            // 2. append new columns from availableColumns“not yet in order” to the end
             const newColumns = availableColumns.filter(c => !columnOrder.includes(c));
-            // 3. 合并成“本次真正要画”的列表，同时把新字段写回 columnOrder（仅内存）
+            // 3. merge into“final render list”, push new columns into columnOrder (memory only)
             const columnsToRender = [...existInOrder, ...newColumns];
             if (newColumns.length) {
                 columnOrder.push(...newColumns);
-                // 顺手持久化，防止刷新丢失
+                // persist to avoid loss on refresh
                 try {
                     localStorage.setItem('logViewerColumnOrder', JSON.stringify(columnOrder));
                 } catch (e) {
                     console.error('Failed to save columnOrder:', e);
                 }
             }
-            // 4. 画 DOM
+            // 4. render DOM
             columnsToRender.forEach(column => {
                 const isChecked = visibleColumns.includes(column);
                 const div = document.createElement('div');
@@ -1304,15 +1304,15 @@
             });
         }
 
-        // 设置拖拽排序功能
+        // setup drag-and-drop sorting
         function setupDragAndDrop() {
             const columnList = document.getElementById('columnList');
-            // 委托事件，列表项是动态生成的没关系
+            // event delegation, list items are dynamically generated
             columnList.addEventListener('dragstart', e => {
                 const item = e.target.closest('.column-item');
                 if (!item) return;
                 e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', item.dataset.column); // 只传列名
+                e.dataTransfer.setData('text/plain', item.dataset.column); // pass column name only
                 item.classList.add('dragging');
             });
             columnList.addEventListener('dragend', e => {
@@ -1325,7 +1325,7 @@
             });
             columnList.addEventListener('drop', e => {
                 e.preventDefault();
-                const draggedColumn = e.dataTransfer.getData('text/plain'); // 拿到列名
+                const draggedColumn = e.dataTransfer.getData('text/plain'); // retrieve column name
                 if (!draggedColumn) return;
                 const targetItem = document.elementFromPoint(e.clientX, e.clientY)
                                           ?.closest('.column-item');
@@ -1334,20 +1334,20 @@
                                          .map(el => el.dataset.column);
                 const srcIndex = allColumns.indexOf(draggedColumn);
                 const tgtIndex = allColumns.indexOf(targetItem.dataset.column);
-                if (srcIndex === -1 || tgtIndex === -1) return; // 保险
-                // 更新顺序
+                if (srcIndex === -1 || tgtIndex === -1) return; // safety check
+                // update order
                 columnOrder.splice(srcIndex, 1);
                 columnOrder.splice(tgtIndex, 0, draggedColumn);
-                // 重新渲染
+                // re-render
                 renderColumnEditor();
             });
         }
 
-        // 应用列设置
+        // apply column settings
         function applyColumnSettings() {
             const checkboxes = document.querySelectorAll('.column-checkbox:checked');
             visibleColumns = Array.from(checkboxes).map(cb => cb.id.replace('col-', ''));
-            // 保存设置到localStorage
+            // save settings to localStorage
             const settings = {
                 visibleColumns: visibleColumns,
                 columnOrder: columnOrder
@@ -1358,15 +1358,15 @@
             } catch (e) {
                 console.error('Failed to save settings to localStorage:', e);
             }
-            // 更新表头
+            // update table header
             renderTableHeader();
             // **MODIFIED**: Force a full re-render of the table body to reflect new column settings
             updateDisplayFromCache({ reset: true });
-            // 关闭下拉框
+            // close dropdown
             document.getElementById('headerEditorDropdown').classList.remove('show');
         }
 
-        // 渲染表头
+        // render table header
         function renderTableHeader() {
             const headerRow = document.getElementById('logTableHeader');
             headerRow.innerHTML = '';
@@ -1382,18 +1382,18 @@
 
         function extractAvailableColumns(logs) {
             const allFields = new Set(availableColumns); // Start with existing known columns
-            // 从日志数据中提取其他所有可能字段
+            // extract all possible fields from log data
             if (logs && logs.length > 0) {
                 logs.forEach(log => {
-                    // 遍历日志对象的所有属性
+                    // iterate all properties of log object
                     for (const key in log) {
-                        if (log.hasOwnProperty(key)) { // 确保是对象自身的属性，而非继承的
+                        if (log.hasOwnProperty(key)) { // ensure own property, not inherited
                             allFields.add(key);
                         }
                     }
                 });
             }
-            // 更新全局变量
+            // update global variables
             availableColumns = Array.from(allFields);
         }
 
@@ -1407,7 +1407,7 @@
         function prependTableRows(logs) {
             const tbody = logTableBody;
             logs
-                .reverse()                  // 先插最旧的，顺序才不会颠倒
+                .reverse()                  // insert oldest first to keep order correct
                 .forEach(log => {
                     const tr = createLogRow(log);
                     tbody.insertBefore(tr, tbody.firstChild);
@@ -1489,11 +1489,11 @@
             if (tbody) {
                 tbody.innerHTML = '';
             }
-            // 重置计数器和其他状态
+            // reset counters and other state
             displayMinId = null;
             displayMaxId = null;
             totalEntries = 0;
-            // 更新界面显示
+            // update UI display
             document.getElementById('entryCount').textContent = '0 Entries';
         }
 
@@ -1505,7 +1505,7 @@
                 obsEl.className = 'scroll-observer';
                 obsEl.style.height = '1px';
             }
-            // 重新插到 tbody 最前面
+            // re-insert at the front of tbody
             const tbody = logTableBody;
             if (tbody.firstChild) {
                 tbody.insertBefore(obsEl, tbody.firstChild);
@@ -1517,10 +1517,10 @@
 
         function setupColumnEventDelegation() {
             const columnList = document.getElementById('columnList');
-            // 处理复选框的点击事件（事件委托）
+            // handle checkbox clicks via event delegation
             columnList.addEventListener('change', function(e) {
                 if (e.target && e.target.classList.contains('column-checkbox')) {
-                    // 复选框状态已变，无需额外操作
+                    // checkbox state changed, no extra action needed
                     console.log('Checkbox changed:', e.target.id, e.target.checked);
                 }
             });
@@ -1535,31 +1535,31 @@
             });
         }
 
-        // --------------------------------------------- 重构后的函数 -----------------------------------------------------
-        // 全局缓存相关变量
-        let logCache = []; // 按_id升序排列的日志缓存
+        // --------------------------------------------- refactored functions -----------------------------------------------------
+        // global cache variables
+        let logCache = []; // log cache sorted by _id ascending
         let logCacheMap = new Map(); // For fast ID-based lookups
-        let cacheMinId = null; // 缓存中最小_id
-        let cacheMaxId = null; // 缓存中最大_id
-        // 显示列表相关变量
-        let displayMinId = null; // 当前显示的最小_id
-        let displayMaxId = null; // 当前显示的最大_id
+        let cacheMinId = null; // min _id in cache
+        let cacheMaxId = null; // max _id in cache
+        // display list variables
+        let displayMinId = null; // min _id currently displayed
+        let displayMaxId = null; // max _id currently displayed
         let moduleFilterMode = 'exclude';   // 'include' | 'exclude'
 
         // --- MODIFIED: `mergeLogsToCache` now also updates the lookup map and trims the cache ---
         function mergeLogsToCache(newLogs) {
             if (!newLogs || newLogs.length === 0) return;
-            // 确保newLogs是数组
+            // ensure newLogs is an array
             const logs = Array.isArray(newLogs) ? newLogs : [newLogs];
-            // 如果缓存为空，直接设置
+            // if cache empty, set directly
             if (logCache.length === 0) {
                 logCache = logs.sort((a, b) => a._id - b._id);
             } else {
-                // 合并并去重
+                // merge and deduplicate
                 const idSet = new Set(logCache.map(log => log._id));
                 const uniqueNewLogs = logs.filter(log => !idSet.has(log._id));
                 if (uniqueNewLogs.length === 0) return;
-                // 合并到缓存并重新排序
+                // merge into cache and re-sort
                 logCache = logCache.concat(uniqueNewLogs).sort((a, b) => a._id - b._id);
             }
 
@@ -1582,9 +1582,9 @@
         }
 
         /**
-         * 从接口获取日志数据并合并到缓存
+         * fetch logs from API and merge into cache
          * @param {number} startId - The starting log ID.
-         * @param {number} count - 获取数量.
+         * @param {number} count - number of logs to fetch.
          */
         function fetchLogsToCache(startId, count) {
             return new Promise((resolve, reject) => {
@@ -1632,16 +1632,16 @@
             });
         }
 
-        // 返回“表格里还能再插多少行”
+        // return“how many more rows can be inserted into the table”
         function getRemainingSlots() {
             const currentRows = document.querySelectorAll('#logTableBody tr[data-log-id]').length;
             return Math.max(0, MAX_LOG_LIMIT - currentRows);
         }
 
          /**
-         * 基于缓存更新显示列表。
-         * @param {object} [options={}] - 更新选项
-         * @param {boolean} [options.reset=false] - 如果为true，则强制全量刷新列表
+         * update display list from cache.
+         * @param {object} [options={}] - update options
+         * @param {boolean} [options.reset=false] - if true, force full re-render
          */
          // --- MODIFIED: `updateDisplayFromCache` uses new limit-respecting functions ---
         function updateDisplayFromCache(options = {}) {
@@ -1651,25 +1651,25 @@
                 clearLogTable();
                 displayMinId = null;
                 displayMaxId = null;
-                // ... (更新统计信息)
+                // ... (update stats)
                 totalEntries = 0;
                 document.getElementById('entryCount').textContent = `0 Entries`;
                 return;
             }
 
-            // 3. [计算新边界] - Filtered log is not way larger than full log.
+            // 3. [calculate new boundaries]
             const newDisplayMinId = logCache[0]._id;
             const newDisplayMaxId = logCache[logCache.length - 1]._id;
 
-            // 4. [决定更新策略]
-            // 如果是强制重置，或是首次加载，则执行全量更新
+            // 4. [decide update strategy]
+            // if forced reset or first load, do full update
             if (reset || displayMinId === null) {
                 console.log("Render log table - FULL.");
                 renderTableBody(logCache);
             }
-            // 否则，执行增量更新
+            // otherwise, incremental update
             else {
-                // 在头部追加 (Prepend)
+                // prepend to head
                 if (newDisplayMinId < displayMinId) {
                     const logsToPrepend = logCache.filter(log => log._id < displayMinId);
                     console.log("Render log table - Head ", logsToPrepend.length);
@@ -1682,7 +1682,7 @@
                     }
                 }
 
-                // 在尾部追加 (Append)
+                // append to tail
                 if (newDisplayMaxId > displayMaxId) {
                     const logsToAppend = logCache.filter(log => log._id > displayMaxId);
                     console.log("Render log table - Tail ", logsToAppend.length);
@@ -1697,7 +1697,7 @@
                 }
             }
 
-            // 5. [更新状态和统计]
+            // 5. [update state and stats]
 
             const allLogRows = logTableBody.querySelectorAll('tr[data-log-id]');
             if (allLogRows.length > 0) {
@@ -1716,21 +1716,21 @@
             document.getElementById('entryCount').textContent = `${totalEntries.toLocaleString()} Entries`;
         }
 
-        // **重写后的、更优化的代码**
+        // **rewritten, more optimized code**
         function loadMoreLogs() {
-            if (isLoading) return; // 只需要一个加载守卫
+            if (isLoading) return; // single loading guard
 
-            // 1. 检查是否可以从缓存加载
+            // 1. check if we can load from cache
             const oldestDisplayedLogIndex = logCache.findIndex(log => log._id === displayMinId);
             if (oldestDisplayedLogIndex > 0) {
                 console.log("Loading more logs from cache...");
-                // 从缓存中取出更早的日志来显示（这里只是一个简化的例子，实际应由 updateDisplayFromCache 处理）
-                // 简单地触发一次显示更新即可
+                // load older logs from cache (simplified; updateDisplayFromCache handles the real logic)
+                // simply trigger a display update
                 updateDisplayFromCache();
-                return; // 从缓存加载完成，结束
+                return; // done loading from cache
             }
 
-            // 2. 如果缓存到顶，且服务器还有，则从网络加载
+            // 2. if cache exhausted and server has more, fetch from network
             if (hasMoreLogs) {
                 console.log("Fetching more logs from server...");
                 const startId = cacheMinId;
@@ -1748,7 +1748,7 @@
             }
         }
 
-        // 在日志加载完成后刷新列选项
+            // refresh column options after log loading
         function loadInitialData() {
             updateStats();
             fetchLogsToCache(null, currentLimit)
@@ -1758,10 +1758,10 @@
                         setTimeout(() => scrollToBottom(), 100);
                     }
 
-                    // 日志加载完成后刷新列选项
+                    // refresh column options after log loading
                     refreshColumnOptions();
 
-                    // 尝试自动设置默认模块层级
+                    // try to set default module hierarchy
                     if (availableColumns.includes('module')) {
                         document.getElementById('moduleLevel1').value = 'module';
                     }
@@ -1819,7 +1819,7 @@
 
         // ----------------------------------------- Filter Related -----------------------------------------
 
-        // 模块层级配置
+        // module hierarchy config
         let moduleLevel1 = 'module';
         let moduleLevel2 = 'name';
         let moduleLevel3 = 'funcName';
@@ -1827,28 +1827,28 @@
         let selectedLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
         let selectedModules = [];
 
-        // 存储节点是否有子节点的映射
+        // store mapping of whether node has children
         let nodeHasChildrenMap = new Map();
-        // 存储所有节点路径
+        // store all node paths
         let allModulePaths = [];
 
-        // 刷新列选项下拉框
+        // refresh column option dropdowns
         function refreshColumnOptions() {
             const level1Select = document.getElementById('moduleLevel1');
             const level2Select = document.getElementById('moduleLevel2');
             const level3Select = document.getElementById('moduleLevel3');
 
-            // 保存当前选中的值
+            // save currently selected values
             const currentLevel1 = level1Select.value;
             const currentLevel2 = level2Select.value;
             const currentLevel3 = level3Select.value;
 
-            // 清空选项
+            // clear options
             level1Select.innerHTML = '<option value="">-- Select Column --</option>';
             level2Select.innerHTML = '<option value="">-- Select Column --</option>';
             level3Select.innerHTML = '<option value="">-- Select Column --</option>';
 
-            // 添加新选项
+            // add new options
             availableColumns.forEach(column => {
                 const option1 = document.createElement('option');
                 option1.value = column;
@@ -1874,7 +1874,7 @@
             document.getElementById('moduleLevel3').value = moduleLevel3;
         }
 
-        // 生成模块树
+        // generate module tree
         function generateModuleTree() {
             const level1 = document.getElementById('moduleLevel1').value;
             const level2 = document.getElementById('moduleLevel2').value;
@@ -1892,15 +1892,15 @@
             buildModuleHierarchy();
         }
 
-        // 构建模块层次结构
+        // build module hierarchy
         function buildModuleHierarchy() {
             const hierarchy = {};
 
-            // 遍历所有日志
+            // iterate all logs
             logCache.forEach(log => {
                 let path = [];
 
-                // 根据配置的层级添加路径元素
+            // add path elements according to configured levels
                 if (moduleLevel1 && log[moduleLevel1]) {
                     path.push(log[moduleLevel1]);
                 }
@@ -1911,13 +1911,13 @@
                     path.push(log[moduleLevel3]);
                 }
 
-                // 构建树结构 - 添加空路径检查
+                // build tree structure - add empty path check
                 if (path.length > 0) {
                     let currentLevel = hierarchy;
                     path.forEach((segment, index) => {
-                        // 确保 segment 是有效的字符串
+                        // ensure segment is a valid string
                         const seg = String(segment).trim();
-                        if (!seg) return; // 跳过空段
+                        if (!seg) return; // skip empty segment
 
                         if (!currentLevel[seg]) {
                             currentLevel[seg] = {};
@@ -1929,7 +1929,7 @@
 
             moduleHierarchy = hierarchy;
 
-            // 构建节点是否有子节点的映射和所有路径列表
+            // build node-has-children mapping and all path list
             nodeHasChildrenMap = new Map();
             allModulePaths = [];
             traverseHierarchy(moduleHierarchy, '');
@@ -1937,7 +1937,7 @@
             renderModuleTree(moduleHierarchy);
         }
 
-        // 遍历层次结构并填充映射
+        // traverse hierarchy and fill mapping
         function traverseHierarchy(node, parentPath) {
             if (!node || typeof node !== 'object') return;
 
@@ -1955,13 +1955,13 @@
         }
 
         function initModuleSystem() {
-            // 生成模块层次结构
+            // generate module hierarchy
             // buildModuleHierarchy();
 
-            // 初始选择所有根节点
+            // initially select all root nodes
             selectedModules = Object.keys(moduleHierarchy);
 
-            // 渲染模块树
+            // render module tree
             renderModuleTree(moduleHierarchy);
         }
 
@@ -1969,7 +1969,7 @@
             const box = document.getElementById('moduleTree');
             box.innerHTML = '';
 
-            // 递归渲染节点
+            // recursively render node
             function renderNode(name, children, depth = 0, parentPath = '') {
                 const fullPath = parentPath ? `${parentPath}.${name}` : name;
                 const hasChildren = children && Object.keys(children).length > 0;
@@ -1997,7 +1997,7 @@
                     });
                 }
 
-                // 展开/折叠交互
+                // expand/collapse interaction
                 if (hasChildren) {
                     const toggleIcon = labelDiv.querySelector('.tree-toggle');
                     toggleIcon.addEventListener('click', (e) => {
@@ -2014,33 +2014,33 @@
                 return nodeDiv;
             }
 
-            // 渲染根节点
+            // render root nodes
             Object.entries(hierarchy).forEach(([name, children]) => {
                 box.appendChild(renderNode(name, children));
             });
         }
 
         /**
-         * 按照「上层勾选就覆盖子树，叶子勾选必须完整路径」的规则
-         * 重新计算 selectedModules
+         * recompute selectedModules: parent checked covers subtree, leaf checked needs full path
+         * recompute selectedModules
          */
         function rebuildSelectedModules() {
-            // 1. 收集所有被勾选的节点
+            // 1. collect all checked nodes
             const checked = Array.from(document.querySelectorAll('.tree-checkbox:checked'))
                                 .map(cb => cb.dataset.path);
 
-            // 2. 去掉「被祖先节点覆盖」的冗余节点
+            // 2. remove redundant nodes covered by ancestor
             const minimal = [];
-            checked.sort();   // 保证短路径在前
+            checked.sort();   // ensure shorter paths first
             for (const path of checked) {
-                // 如果已经有一个祖先被选中，则跳过
+                // skip if an ancestor is already selected
                 const hasAncestor = minimal.some(m => path.startsWith(m + '.'));
                 if (!hasAncestor) {
                     minimal.push(path);
                 }
             }
 
-            // 3. 把「非叶子」节点后面加 .*，叶子保持原样
+            // 3. append .* to non-leaf nodes, keep leaves as-is
             selectedModules = minimal.map(p => {
                 return nodeHasChildrenMap.get(p) ? p + '.*' : p;
             });
@@ -2049,21 +2049,21 @@
         function isLogVisible(log) {
             if (!log) return false;
 
-            // 1. 级别过滤
+            // 1. level filter
             if (!selectedLevels.includes(log.levelname)) return false;
 
-            // 2. 模块过滤
+            // 2. module filter
             if (selectedModules.length === 0) return true;
 
-            // 3. 拼出日志的完整 module 字符串
+            // 3. build full module string from log
             const segs = [];
             if (moduleLevel1 && log[moduleLevel1]) segs.push(log[moduleLevel1]);
             if (moduleLevel2 && log[moduleLevel2]) segs.push(log[moduleLevel2]);
             if (moduleLevel3 && log[moduleLevel3]) segs.push(log[moduleLevel3]);
             const moduleStr = segs.join('.');
 
-            // 4. 任一规则满足即可
-            // 根据 Include / Exclude 模式决定可见性
+            // 4. any rule satisfied is enough
+            // visibility depends on Include / Exclude mode
             const hit = selectedModules.some(rule => {
                 if (rule.endsWith('.*')) {
                 const prefix = rule.slice(0, -2);
@@ -2077,13 +2077,13 @@
 
         function toggleAllModules(selectAll = true) {
             if (selectAll) {
-                // 选择所有节点
+                // select all nodes
                 selectedModules = [...allModulePaths];
             } else {
                 selectedModules = [];
             }
 
-            // 更新所有复选框状态
+            // update all checkbox states
             document.querySelectorAll('.tree-checkbox').forEach(checkbox => {
                 checkbox.checked = selectAll;
             });
