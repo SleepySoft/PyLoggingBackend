@@ -965,7 +965,9 @@
         const HISTORY_DOM_LIMIT = 2000;
 
         // Cache bounds: soft limit for total memory, hot tail always retained.
-        const CACHE_SOFT_LIMIT = 10000; // ~5 MB at 500 bytes/log
+        // Keep enough raw logs to cover the hot buffer + offline buffer range
+        // so filter changes can be re-evaluated without refetching everything.
+        const CACHE_SOFT_LIMIT = 4000;
         const HOT_CACHE_SIZE = 2000;    // newest logs never pruned
 
         // column configuration management
@@ -2011,7 +2013,7 @@
 
                 debugEl.textContent =
                     `Rate:${rate.toLocaleString()}/s ` +
-                    `All:${rawCount.toLocaleString()} ` +
+                    `Raw:${rawCount.toLocaleString()} ` +
                     `Hot:${hotCount.toLocaleString()} ` +
                     `History:${offlineTotal.toLocaleString()} ` +
                     `Shown:${visibleDom}/${allRows.length} ` +
@@ -2020,7 +2022,7 @@
 
                 debugEl.title =
                     `Rate: ${rate.toLocaleString()} logs/sec (last 1s)\n` +
-                    `All (raw cache): ${rawCount.toLocaleString()}\n` +
+                    `Raw cache (unfiltered): ${rawCount.toLocaleString()}\n` +
                     `Hot buffer (filtered): ${hotCount.toLocaleString()}\n` +
                     `History (offline cache): ${offlineTotal.toLocaleString()}\n` +
                     `Shown in table: ${visibleDom.toLocaleString()} / ${allRows.length.toLocaleString()}\n` +
