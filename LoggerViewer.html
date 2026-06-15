@@ -964,11 +964,7 @@
         // scroll direction so the DOM never grows beyond this limit.
         const HISTORY_DOM_LIMIT = 2000;
 
-        // Cache bounds: soft limit for total memory, hot tail always retained.
-        // Keep enough raw logs to cover the hot buffer + offline buffer range
-        // so filter changes can be re-evaluated without refetching everything.
-        const CACHE_SOFT_LIMIT = 4000;
-        const HOT_CACHE_SIZE = 2000;    // newest logs never pruned
+
 
         // column configuration management
         let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
@@ -1511,11 +1507,6 @@
             tr.className = `log-level-${log.levelname}`;
             tr.dataset.logId = log._id; // Add ID for state tracking
 
-            // Set initial visibility based on current filters
-            if (!isLogVisible(log)) {
-                tr.style.display = 'none';
-            }
-
             const orderedVisibleColumns = columnsToRender || columnOrder.filter(col => visibleColumns.includes(col));
             orderedVisibleColumns.forEach(column => {
                 const td = document.createElement('td');
@@ -1615,34 +1606,30 @@
         }
 
         // --------------------------------------------- refactored functions -----------------------------------------------------
-        // ========== Tiered Cache Architecture ==========
+        // ========== Two-Level Filtered Cache ==========
         //
-        // Layer 1: Raw Cache — all received logs (for column discovery & filter rebuilds).
-        // Layer 2: Hot Buffer — currently visible logs, kept in memory for instant browsing.
-        // Layer 3: Offline Buffer — historical segments fetched on demand.
+        // The backend now applies level/module filters, so the frontend only needs
+        // to cache logs that already pass the current filter.
         //
-        // Eviction flow: rawCache prunes oldest → hotBuffer prunes oldest →
-        //                if continuous with offlineBuffer, prepend to newest segment.
+        // Layer 1: Hot Buffer — newest filtered logs, kept in memory for instant browsing.
+        // Layer 2: Offline Buffer — older filtered logs evicted from the hot buffer.
+        //
+        // Eviction flow: hotBuffer prunes oldest → if continuous with offlineBuffer,
+        //                append to offlineBuffer; otherwise replace it.
 
-        // --- Layer 1: Raw Cache ---
-        let rawCache = [];
-        let rawCacheMap = new Map();
-        let rawCacheMinId = null;
-        let rawCacheMaxId = null;
-
-        // --- Layer 2: Hot Buffer ---
-        let hotBuffer = [];          // visible logs sorted by _id ascending
+        // --- Layer 1: Hot Buffer ---
+        let hotBuffer = [];          // filtered logs sorted by _id ascending
         let hotBufferMap = new Map();
         const HOT_BUFFER_LIMIT = 2000;
 
         // --- Log arrival rate tracking ---
         let logRateSamples = [];  // [{time: ms, count: number}] for the last few seconds
 
-        // --- Layer 3: Offline Buffer ---
-        // Single contiguous segment of older logs that sits immediately before the hot buffer.
+        // --- Layer 2: Offline Buffer ---
+        // Single contiguous segment of older filtered logs immediately before the hot buffer.
         // If it ever drifts apart from the hot buffer, it is discarded entirely.
         let offlineBuffer = {
-            logs: [],                // oldest visible logs, sorted by _id ascending
+            logs: [],                // older filtered logs, sorted by _id ascending
             startId: null,
             endId: null,
             maxSize: 2000            // small, because scrolling is continuous
@@ -1653,7 +1640,7 @@
         let displayMaxId = null;
         let moduleFilterMode = 'exclude';   // 'include' | 'exclude'
 
-        // --- Merge entry point: new logs arrive → rawCache → hotBuffer ---
+        // --- Merge entry point: new logs arrive → hotBuffer ---
         function recordLogRate(count) {
             const now = Date.now();
             const last = logRateSamples[logRateSamples.length - 1];
@@ -1682,54 +1669,9 @@
             const logs = Array.isArray(newLogs) ? newLogs : [newLogs];
             recordLogRate(logs.length);
 
-            // 1. Merge full payload into raw cache
-            mergeToRawCache(logs);
-
-            // 2. Filter visible logs and merge into hot buffer
-            const visible = logs.filter(isLogVisible);
-            if (visible.length > 0) {
-                mergeToHotBuffer(visible);
-            }
-
+            // Logs from the backend are already filtered; merge directly into hot buffer.
+            mergeToHotBuffer(logs);
             updateDebugInfo();
-        }
-
-        function mergeToRawCache(logs) {
-            if (logs.length === 0) return;
-            if (rawCache.length === 0) {
-                rawCache = logs.slice().sort((a, b) => a._id - b._id);
-            } else {
-                // Fast path: SSE appends newer logs with _id > rawCacheMaxId.
-                // Only fall back to merge+sort for out-of-order history fetches.
-                const allNewer = logs.every(log => log._id > rawCacheMaxId);
-                if (allNewer) {
-                    rawCache.push(...logs);
-                } else {
-                    const unique = logs.filter(log => !rawCacheMap.has(log._id));
-                    if (unique.length === 0) return;
-                    rawCache = rawCache.concat(unique).sort((a, b) => a._id - b._id);
-                }
-            }
-
-            // Incrementally update the map instead of rebuilding it every time.
-            rawCache.forEach(log => rawCacheMap.set(log._id, log));
-            rawCacheMinId = rawCache[0]._id;
-            rawCacheMaxId = rawCache[rawCache.length - 1]._id;
-
-            pruneRawCache();
-        }
-
-        function pruneRawCache() {
-            if (rawCache.length <= CACHE_SOFT_LIMIT) return;
-            const excess = rawCache.length - CACHE_SOFT_LIMIT;
-            const safeToDelete = Math.max(0, rawCache.length - HOT_CACHE_SIZE);
-            const deleteCount = Math.min(excess, safeToDelete);
-            if (deleteCount > 0) {
-                const deleted = rawCache.splice(0, deleteCount);
-                deleted.forEach(log => rawCacheMap.delete(log._id));
-                rawCacheMinId = rawCache[0]._id;
-                rawCacheMaxId = rawCache[rawCache.length - 1]._id;
-            }
         }
 
         function mergeToHotBuffer(logs) {
@@ -1836,22 +1778,21 @@
                     params.set('start_log_id', Math.max(0, finalStartId));
                 }
 
+                selectedLevels.forEach(level => params.append('level[]', level));
+                selectedModules.forEach(module => params.append('module[]', module));
+                params.set('module_mode', moduleFilterMode);
+
                 fetch('/logger/api/logs?' + params)
                     .then(r => r.json())
                     .then(data => {
                         const { logs, has_more } = data;
                         if (logs && logs.length > 0) {
                             extractAvailableColumns(logs);
-                            // 1. Into raw cache (full payload)
-                            mergeToRawCache(logs);
-                            // 2. Into hot buffer (visible only)
-                            const visible = logs.filter(isLogVisible);
-                            if (visible.length > 0) {
-                                mergeToHotBuffer(visible);
-                                // 3. History fetches replace the offline buffer
-                                if (isHistoryFetch) {
-                                    setOfflineBuffer(visible);
-                                }
+                            // Backend already applies filters; merge directly.
+                            mergeToHotBuffer(logs);
+                            // History fetches replace the offline buffer.
+                            if (isHistoryFetch) {
+                                setOfflineBuffer(logs);
                             }
                         }
                         isLoading = false;
@@ -2001,7 +1942,6 @@
                 const debugEl = document.getElementById('debugInfo');
                 if (!debugEl) return;
 
-                const rawCount = rawCache.length;
                 const hotCount = hotBuffer.length;
                 const offlineTotal = offlineBuffer.logs.length;
                 const continuous = isCacheContinuous();
@@ -2013,7 +1953,6 @@
 
                 debugEl.textContent =
                     `Rate:${rate.toLocaleString()}/s ` +
-                    `Raw:${rawCount.toLocaleString()} ` +
                     `Hot:${hotCount.toLocaleString()} ` +
                     `History:${offlineTotal.toLocaleString()} ` +
                     `Shown:${visibleDom}/${allRows.length} ` +
@@ -2022,9 +1961,8 @@
 
                 debugEl.title =
                     `Rate: ${rate.toLocaleString()} logs/sec (last 1s)\n` +
-                    `Raw cache (unfiltered): ${rawCount.toLocaleString()}\n` +
-                    `Hot buffer (filtered): ${hotCount.toLocaleString()}\n` +
-                    `History (offline cache): ${offlineTotal.toLocaleString()}\n` +
+                    `Hot buffer (newest filtered logs): ${hotCount.toLocaleString()}\n` +
+                    `History (older filtered logs): ${offlineTotal.toLocaleString()}\n` +
                     `Shown in table: ${visibleDom.toLocaleString()} / ${allRows.length.toLocaleString()}\n` +
                     `Displayed _id range: ${displayMinId ?? '-'} ~ ${displayMaxId ?? '-'}\n` +
                     `Cache continuity: ${continuous ? 'OK' : 'broken — history will be refetched when scrolling up'}`;
@@ -2052,7 +1990,7 @@
             // 3. Fetch from backend
             if (hasMoreLogs) {
                 console.log("Fetching more logs from server...");
-                const startId = displayMinId || hotBuffer[0]?._id || rawCacheMinId;
+                const startId = displayMinId || hotBuffer[0]?._id;
                 if (startId === null || startId === 0) {
                     hasMoreLogs = false;
                     return;
@@ -2095,11 +2033,16 @@
             if (eventSource) eventSource.close();
             updateConnectionStatus('connecting');
 
-            // Use rawCacheMaxId as the starting point for streaming
-            const lastId = rawCacheMaxId !== null ? rawCacheMaxId : -1;
+            // Use the newest _id we already have as the streaming starting point.
+            const lastId = hotBuffer.length > 0
+                ? hotBuffer[hotBuffer.length - 1]._id
+                : (displayMaxId !== null ? displayMaxId : -1);
 
             const params = new URLSearchParams();
             params.append('last_log_id', lastId);
+            selectedLevels.forEach(level => params.append('level[]', level));
+            selectedModules.forEach(module => params.append('module[]', module));
+            params.set('module_mode', moduleFilterMode);
 
             const url = `/logger/api/stream?${params.toString()}`;
             eventSource = new EventSource(url);
@@ -2210,8 +2153,9 @@
         function buildModuleHierarchy() {
             const hierarchy = {};
 
-            // iterate all logs in raw cache for module hierarchy
-            rawCache.forEach(log => {
+            // iterate the filtered caches (offline + hot) for module hierarchy
+            const allLogs = [...offlineBuffer.logs, ...hotBuffer];
+            allLogs.forEach(log => {
                 let path = [];
 
             // add path elements according to configured levels
@@ -2360,35 +2304,6 @@
             });
         }
 
-        function isLogVisible(log) {
-            if (!log) return false;
-
-            // 1. level filter
-            if (!selectedLevels.includes(log.levelname)) return false;
-
-            // 2. module filter
-            if (selectedModules.length === 0) return true;
-
-            // 3. build full module string from log
-            const segs = [];
-            if (moduleLevel1 && log[moduleLevel1]) segs.push(log[moduleLevel1]);
-            if (moduleLevel2 && log[moduleLevel2]) segs.push(log[moduleLevel2]);
-            if (moduleLevel3 && log[moduleLevel3]) segs.push(log[moduleLevel3]);
-            const moduleStr = segs.join('.');
-
-            // 4. any rule satisfied is enough
-            // visibility depends on Include / Exclude mode
-            const hit = selectedModules.some(rule => {
-                if (rule.endsWith('.*')) {
-                const prefix = rule.slice(0, -2);
-                return moduleStr === prefix || moduleStr.startsWith(prefix + '.');
-                } else {
-                    return moduleStr === rule;
-                }
-            });
-            return moduleFilterMode === 'include' ? hit : !hit;
-        }
-
         function toggleAllModules(selectAll = true) {
             if (selectAll) {
                 // select all nodes
@@ -2406,42 +2321,27 @@
         /**
          * NEW: Iterates through the DOM to apply filters by hiding/showing rows.
          */
-        function applyFiltersToDOM() {
-            const rows = logTableBody.querySelectorAll('tr[data-log-id]');
-            let visibleCount = 0;
-            rows.forEach(row => {
-                const logId = parseInt(row.dataset.logId, 10);
-                const log = rawCacheMap.get(logId);
-                if (isLogVisible(log)) {
-                    row.style.display = '';
-                    visibleCount++;
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-            
-            // Update the displayed entry count
-            totalEntries = visibleCount;
-            document.getElementById('entryCount').textContent = `${visibleCount.toLocaleString()} Entries`;
-        }
-
         function applyFilters() {
             moduleFilterMode = document.querySelector('input[name="moduleMode"]:checked').value;
 
-            // 1. Update filter state from UI (no visual change yet)
+            // 1. Update filter state from UI
             updateSelectedLevels();
             rebuildSelectedModules();
             updateFilterStatus();
 
-            // 2. Apply the new filters to the existing DOM
-            console.log("Applying filters by toggling visibility...");
-            applyFiltersToDOM();
+            // 2. Reset caches and UI — backend now applies the filter, so we reload.
+            console.log("Applying filters — reloading from backend...");
+            hotBuffer = [];
+            hotBufferMap.clear();
+            offlineBuffer.logs = [];
+            offlineBuffer.startId = null;
+            offlineBuffer.endId = null;
+            clearLogTable();
+            displayMinId = null;
+            displayMaxId = null;
 
-            // NOTE: Do NOT restart the SSE connection here. Filters are a pure
-            // client-side concern (display:none). Reconnecting would drop any logs
-            // that arrive during the brief disconnection window.
-            // If backend-level filtering is ever added, the reconnect logic
-            // should be reintroduced with a proper filter parameter.
+            // 3. Reload recent matching logs and restart SSE with the new filters.
+            loadInitialData();
 
             updateDebugInfo();
         }

@@ -174,6 +174,22 @@ class LoggerBackend:
             'moduleCounts': module_counts,
         })
 
+    @staticmethod
+    def _build_filter_func(level_filter, module_filter, module_mode):
+        """Build a filter function supporting level, module wildcard, and include/exclude mode."""
+        def matches(entry):
+            if level_filter and entry.get('levelname', 'UNKNOWN') not in level_filter:
+                return False
+            if not module_filter:
+                return True
+            full = (entry.get('module', '') + '.' + entry.get('name', ''))
+            matched = any(
+                rule == full or (rule.endswith('.*') and (full == rule[:-2] or full.startswith(rule[:-2] + '.')))
+                for rule in module_filter
+            )
+            return matched if module_mode == 'include' else not matched
+        return matches
+
     def get_logs(self):
         """Get logs with filtering and pagination using _id"""
         try:
@@ -181,6 +197,7 @@ class LoggerBackend:
             limit = int(request.args.get('limit', 100))
             level_filter = request.args.getlist('level[]')
             module_filter = request.args.getlist('module[]')
+            module_mode = request.args.get('module_mode', 'exclude')
 
             if start_arg is not None:
                 start_log_id = int(start_arg)
@@ -189,10 +206,7 @@ class LoggerBackend:
                 start_log_id = newest_id - limit
             start_log_id = max(0, start_log_id)
 
-            filter_func = lambda entry: (
-                    (not level_filter or entry.get('levelname', 'UNKNOWN') in level_filter) and
-                    (not module_filter or (entry.get('module', '') + '.' + entry.get('name', '')) in module_filter)
-            )
+            filter_func = self._build_filter_func(level_filter, module_filter, module_mode)
 
             # Fetch log entries using _id
             logs = self.log_wrapper.get_logs(start_log_id=start_log_id, count=limit, filter_func=filter_func)
@@ -213,10 +227,15 @@ class LoggerBackend:
             return jsonify({'error': str(e)}), 500
 
     def stream_logs(self):
-        """Server-sent events with _id based updates"""
+        """Server-sent events with _id based updates, optionally filtered by level/module."""
         # Get last_id from query parameter or session
         limit = int(request.args.get('limit', 100))
         last_log_id_arg = request.args.get('last_log_id')
+        level_filter = request.args.getlist('level[]')
+        module_filter = request.args.getlist('module[]')
+        module_mode = request.args.get('module_mode', 'exclude')
+
+        filter_func = self._build_filter_func(level_filter, module_filter, module_mode)
 
         last_log_id = int(last_log_id_arg) if last_log_id_arg is not None else None
 
@@ -239,7 +258,8 @@ class LoggerBackend:
                 if self.log_wrapper.check_updates(current_last_id):
                     new_entries = self.log_wrapper.get_logs(
                         start_log_id=current_last_id + 1,
-                        count=limit
+                        count=limit,
+                        filter_func=filter_func
                     )
 
                     if new_entries:
