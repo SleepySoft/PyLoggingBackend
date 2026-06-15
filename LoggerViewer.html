@@ -1430,8 +1430,9 @@
 
         // render table header
         function renderTableHeader() {
-            const headerRow = document.getElementById('logTableHeader');
-            headerRow.innerHTML = '';
+            const thead = document.getElementById('logTableHeader');
+            thead.innerHTML = '';
+            const headerRow = document.createElement('tr');
             // Use columnOrder to respect the order, but only show visibleColumns
             const orderedVisibleColumns = columnOrder.filter(col => visibleColumns.includes(col));
             orderedVisibleColumns.forEach(column => {
@@ -1440,6 +1441,7 @@
                 th.dataset.column = column;
                 headerRow.appendChild(th);
             });
+            thead.appendChild(headerRow);
         }
 
         function extractAvailableColumns(logs) {
