@@ -957,16 +957,16 @@
         let isSidebarTransitioning = false;  // ignore scroll events during sidebar collapse/expand
 
         // In live mode, DOM rows are pruned to this limit to keep rendering fast.
-        const MAX_LOG_LIMIT = 5000;
+        const MAX_LOG_LIMIT = 2000;
 
         // Phase 2: bidirectional sliding window — history mode now uses the same
         // DOM ceiling as live mode. Rows are trimmed from the opposite end of the
         // scroll direction so the DOM never grows beyond this limit.
-        const HISTORY_DOM_LIMIT = 5000;
+        const HISTORY_DOM_LIMIT = 2000;
 
         // Cache bounds: soft limit for total memory, hot tail always retained.
-        const CACHE_SOFT_LIMIT = 20000; // ~10 MB at 500 bytes/log
-        const HOT_CACHE_SIZE = 5000;    // newest logs never pruned
+        const CACHE_SOFT_LIMIT = 10000; // ~5 MB at 500 bytes/log
+        const HOT_CACHE_SIZE = 2000;    // newest logs never pruned
 
         // column configuration management
         let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
@@ -1631,13 +1631,13 @@
         // --- Layer 2: Hot Buffer ---
         let hotBuffer = [];          // visible logs sorted by _id ascending
         let hotBufferMap = new Map();
-        const HOT_BUFFER_LIMIT = 5000;
+        const HOT_BUFFER_LIMIT = 2000;
 
         // --- Layer 3: Offline Buffer ---
         let offlineBuffer = {
             segments: [],            // [{startId, endId, logs: [...]}, ...], newest at index 0
             totalSize: 0,
-            maxTotalSize: 10000
+            maxTotalSize: 5000
         };
 
         // display boundaries
@@ -1663,24 +1663,26 @@
         }
 
         function mergeToRawCache(logs) {
+            if (logs.length === 0) return;
             if (rawCache.length === 0) {
-                rawCache = logs.sort((a, b) => a._id - b._id);
+                rawCache = logs.slice().sort((a, b) => a._id - b._id);
             } else {
-                const idSet = new Set(rawCache.map(log => log._id));
-                const unique = logs.filter(log => !idSet.has(log._id));
-                if (unique.length === 0) return;
-                rawCache = rawCache.concat(unique).sort((a, b) => a._id - b._id);
+                // Fast path: SSE appends newer logs with _id > rawCacheMaxId.
+                // Only fall back to merge+sort for out-of-order history fetches.
+                const allNewer = logs.every(log => log._id > rawCacheMaxId);
+                if (allNewer) {
+                    rawCache.push(...logs);
+                } else {
+                    const unique = logs.filter(log => !rawCacheMap.has(log._id));
+                    if (unique.length === 0) return;
+                    rawCache = rawCache.concat(unique).sort((a, b) => a._id - b._id);
+                }
             }
 
-            rawCacheMap.clear();
-            if (rawCache.length > 0) {
-                rawCache.forEach(log => rawCacheMap.set(log._id, log));
-                rawCacheMinId = rawCache[0]._id;
-                rawCacheMaxId = rawCache[rawCache.length - 1]._id;
-            } else {
-                rawCacheMinId = null;
-                rawCacheMaxId = null;
-            }
+            // Incrementally update the map instead of rebuilding it every time.
+            rawCache.forEach(log => rawCacheMap.set(log._id, log));
+            rawCacheMinId = rawCache[0]._id;
+            rawCacheMaxId = rawCache[rawCache.length - 1]._id;
 
             pruneRawCache();
         }
@@ -1691,27 +1693,29 @@
             const safeToDelete = Math.max(0, rawCache.length - HOT_CACHE_SIZE);
             const deleteCount = Math.min(excess, safeToDelete);
             if (deleteCount > 0) {
-                rawCache.splice(0, deleteCount);
-                rawCacheMap.clear();
-                rawCache.forEach(log => rawCacheMap.set(log._id, log));
+                const deleted = rawCache.splice(0, deleteCount);
+                deleted.forEach(log => rawCacheMap.delete(log._id));
                 rawCacheMinId = rawCache[0]._id;
                 rawCacheMaxId = rawCache[rawCache.length - 1]._id;
             }
         }
 
         function mergeToHotBuffer(logs) {
+            if (logs.length === 0) return;
             if (hotBuffer.length === 0) {
                 hotBuffer = logs.slice().sort((a, b) => a._id - b._id);
             } else {
-                const idSet = new Set(hotBuffer.map(log => log._id));
-                const unique = logs.filter(log => !idSet.has(log._id));
-                if (unique.length === 0) return;
-                hotBuffer = hotBuffer.concat(unique).sort((a, b) => a._id - b._id);
+                const allNewer = logs.every(log => log._id > hotBuffer[hotBuffer.length - 1]._id);
+                if (allNewer) {
+                    hotBuffer.push(...logs);
+                } else {
+                    const unique = logs.filter(log => !hotBufferMap.has(log._id));
+                    if (unique.length === 0) return;
+                    hotBuffer = hotBuffer.concat(unique).sort((a, b) => a._id - b._id);
+                }
             }
 
-            hotBufferMap.clear();
             hotBuffer.forEach(log => hotBufferMap.set(log._id, log));
-
             pruneHotBuffer();
         }
 
@@ -1968,26 +1972,32 @@
         }
 
         // Render cache debug info in the toolbar.
+        let debugUpdatePending = false;
         function updateDebugInfo() {
-            const debugEl = document.getElementById('debugInfo');
-            if (!debugEl) return;
+            if (debugUpdatePending) return;
+            debugUpdatePending = true;
+            requestAnimationFrame(() => {
+                debugUpdatePending = false;
+                const debugEl = document.getElementById('debugInfo');
+                if (!debugEl) return;
 
-            const rawCount = rawCache.length;
-            const hotCount = hotBuffer.length;
-            const offlineSegs = offlineBuffer.segments.length;
-            const offlineTotal = offlineBuffer.totalSize;
-            const continuous = isCacheContinuous();
-            const allRows = logTableBody.querySelectorAll('tr[data-log-id]');
-            let visibleDom = 0;
-            allRows.forEach(row => { if (row.style.display !== 'none') visibleDom++; });
+                const rawCount = rawCache.length;
+                const hotCount = hotBuffer.length;
+                const offlineSegs = offlineBuffer.segments.length;
+                const offlineTotal = offlineBuffer.totalSize;
+                const continuous = isCacheContinuous();
+                const allRows = logTableBody.querySelectorAll('tr[data-log-id]');
+                let visibleDom = 0;
+                allRows.forEach(row => { if (row.style.display !== 'none') visibleDom++; });
 
-            debugEl.textContent =
-                `Raw:${rawCount.toLocaleString()} ` +
-                `Hot:${hotCount.toLocaleString()} ` +
-                `Off:${offlineSegs}/${offlineTotal.toLocaleString()} ` +
-                `DOM:${visibleDom}/${allRows.length} ` +
-                `Range:[${displayMinId ?? '-'},${displayMaxId ?? '-'}] ` +
-                `${continuous ? 'Cont✓' : 'Cont✗'}`;
+                debugEl.textContent =
+                    `Raw:${rawCount.toLocaleString()} ` +
+                    `Hot:${hotCount.toLocaleString()} ` +
+                    `Off:${offlineSegs}/${offlineTotal.toLocaleString()} ` +
+                    `DOM:${visibleDom}/${allRows.length} ` +
+                    `Range:[${displayMinId ?? '-'},${displayMaxId ?? '-'}] ` +
+                    `${continuous ? 'Cont✓' : 'Cont✗'}`;
+            });
         }
 
         // **rewritten, more optimized code**
