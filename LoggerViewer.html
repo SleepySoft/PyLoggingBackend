@@ -2012,7 +2012,7 @@
                 debugEl.textContent =
                     `Rate:${rate.toLocaleString()}/s ` +
                     `All:${rawCount.toLocaleString()} ` +
-                    `Visible:${hotCount.toLocaleString()} ` +
+                    `Hot:${hotCount.toLocaleString()} ` +
                     `History:${offlineTotal.toLocaleString()} ` +
                     `Shown:${visibleDom}/${allRows.length} ` +
                     `IDs:${displayMinId ?? '-'}~${displayMaxId ?? '-'} ` +
@@ -2021,7 +2021,7 @@
                 debugEl.title =
                     `Rate: ${rate.toLocaleString()} logs/sec (last 1s)\n` +
                     `All (raw cache): ${rawCount.toLocaleString()}\n` +
-                    `Visible (after filters): ${hotCount.toLocaleString()}\n` +
+                    `Hot buffer (filtered): ${hotCount.toLocaleString()}\n` +
                     `History (offline cache): ${offlineTotal.toLocaleString()}\n` +
                     `Shown in table: ${visibleDom.toLocaleString()} / ${allRows.length.toLocaleString()}\n` +
                     `Displayed _id range: ${displayMinId ?? '-'} ~ ${displayMaxId ?? '-'}\n` +
