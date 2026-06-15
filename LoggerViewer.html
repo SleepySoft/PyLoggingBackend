@@ -623,21 +623,25 @@
             border-bottom: 1px solid #dee2e6;
             vertical-align: top;
             white-space: nowrap;    /* columns size to content, scroll horizontally */
+            min-width: 120px;       /* keep narrow columns readable */
         }
 
-        /* The message column can be very long; let it wrap so the table does not
-           become infinitely wide, while other columns stay compact and nowrap. */
+        /* The message column can be very long; by default it wraps so the table
+           does not become infinitely wide. A minimum width prevents it from being
+           squeezed by many columns, and a maximum width keeps row heights sane. */
         .log-table td.col-message {
             white-space: pre-wrap;
             word-break: break-word;
             overflow-wrap: anywhere;
+            min-width: 500px;
             max-width: 800px;
         }
 
-        .table-responsive {
-            overflow-x: auto;
-            width: 100%;               /* keep the scroller bound to the available width */
-            -webkit-overflow-scrolling: touch;
+        /* Optional unwrap mode: preserve explicit line breaks only and let the
+           table grow horizontally so very long messages stay on one logical line. */
+        .log-table.unwrap-message td.col-message {
+            white-space: nowrap;
+            max-width: none;
         }
 
         /* fix column selector scroll */
@@ -907,6 +911,10 @@
                     <div class="header-editor-dropdown" id="headerEditorDropdown">
                         <h6>Select Visible Columns</h6>
                         <div id="columnList"></div>
+                        <div class="form-check mt-2 border-top pt-2">
+                            <input class="form-check-input" type="checkbox" id="wrapMessageToggle" checked>
+                            <label class="form-check-label" for="wrapMessageToggle">Wrap long messages</label>
+                        </div>
                         <button class="btn btn-sm btn-primary mt-2" id="applyColumnBtn">Apply</button>
                     </div>
                 </div>
@@ -963,6 +971,7 @@
         let availableColumns = ['asctime', 'levelname', 'module', 'message', 'funcName'];
         let visibleColumns = ['asctime', 'levelname', 'module', 'message'];
         let columnOrder = ['asctime', 'levelname', 'module', 'message'];
+        let wrapLongMessages = true;
 
         // Initialize application
         document.addEventListener('DOMContentLoaded', function() {
@@ -1264,10 +1273,15 @@
                     if (settings.columnOrder && Array.isArray(settings.columnOrder) && settings.columnOrder.length > 0) {
                         columnOrder = settings.columnOrder;
                     }
+                    if (typeof settings.wrapLongMessages === 'boolean') {
+                        wrapLongMessages = settings.wrapLongMessages;
+                    }
                 } catch (e) {
                     console.error('Error loading column settings:', e);
                 }
             }
+            // apply the wrap/unwrap style immediately
+            applyMessageWrapStyle();
             // setup header editor button click
             document.getElementById('headerEditorBtn').addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -1289,6 +1303,17 @@
             });
             // initialize table header
             renderTableHeader();
+        }
+
+        // Apply the message wrap/unwrap style to the table.
+        function applyMessageWrapStyle() {
+            const table = document.querySelector('.log-table');
+            if (!table) return;
+            if (wrapLongMessages) {
+                table.classList.remove('unwrap-message');
+            } else {
+                table.classList.add('unwrap-message');
+            }
         }
 
         function renderColumnEditor() {
@@ -1324,6 +1349,9 @@
                 `;
                 columnList.appendChild(div);
             });
+            // sync the wrap-messages toggle with current state
+            const wrapToggle = document.getElementById('wrapMessageToggle');
+            if (wrapToggle) wrapToggle.checked = wrapLongMessages;
         }
 
         // setup drag-and-drop sorting
@@ -1369,10 +1397,15 @@
         function applyColumnSettings() {
             const checkboxes = document.querySelectorAll('.column-checkbox:checked');
             visibleColumns = Array.from(checkboxes).map(cb => cb.id.replace('col-', ''));
+            // read the wrap-messages toggle
+            const wrapToggle = document.getElementById('wrapMessageToggle');
+            wrapLongMessages = wrapToggle ? wrapToggle.checked : true;
+            applyMessageWrapStyle();
             // save settings to localStorage
             const settings = {
                 visibleColumns: visibleColumns,
-                columnOrder: columnOrder
+                columnOrder: columnOrder,
+                wrapLongMessages: wrapLongMessages
             };
             try {
                 localStorage.setItem('logViewerColumnSettings', JSON.stringify(settings));
