@@ -964,9 +964,10 @@
         // In live mode, DOM rows are pruned to this limit to keep rendering fast.
         const MAX_LOG_LIMIT = 5000;
 
-        // In history mode, DOM is allowed to grow larger so users can browse freely,
-        // but still capped to prevent the browser from freezing after hours of use.
-        const HISTORY_DOM_LIMIT = 30000;
+        // Phase 2: bidirectional sliding window — history mode now uses the same
+        // DOM ceiling as live mode. Rows are trimmed from the opposite end of the
+        // scroll direction so the DOM never grows beyond this limit.
+        const HISTORY_DOM_LIMIT = 5000;
 
         // Cache bounds: soft limit for total memory, hot tail always retained.
         const CACHE_SOFT_LIMIT = 20000; // ~10 MB at 500 bytes/log
@@ -1122,7 +1123,10 @@
             ensureCacheContinuity();
 
             const currentRows = logTableBody.querySelectorAll('tr[data-log-id]').length;
-            const shouldForceReset = options.forceReset || currentRows > MAX_LOG_LIMIT * 2;
+            // With the bidirectional sliding window, history DOM is also capped at
+            // MAX_LOG_LIMIT. If the DOM is at or above the cap, force a clean reset
+            // to avoid incremental append over a full window.
+            const shouldForceReset = options.forceReset || currentRows >= MAX_LOG_LIMIT;
 
             viewMode = 'live';
             autoScrollEnabled = true;
@@ -1864,14 +1868,14 @@
                         const afterHeight = logTableBody.scrollHeight;
                         document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
 
-                        if (viewMode === 'history') {
-                            const rows = logTableBody.querySelectorAll('tr[data-log-id]');
-                            const excess = rows.length - HISTORY_DOM_LIMIT;
-                            if (excess > 0) {
-                                for (let i = 0; i < excess; i++) {
-                                    const idx = rows.length - 1 - i;
-                                    if (rows[idx]) rows[idx].remove();
-                                }
+                        // Bidirectional sliding window: after prepending older rows,
+                        // trim the newest rows (tail) from the opposite end.
+                        const rows = logTableBody.querySelectorAll('tr[data-log-id]');
+                        const excess = rows.length - HISTORY_DOM_LIMIT;
+                        if (excess > 0) {
+                            for (let i = 0; i < excess; i++) {
+                                const idx = rows.length - 1 - i;
+                                if (rows[idx]) rows[idx].remove();
                             }
                         }
                     }
@@ -1883,7 +1887,9 @@
                     console.log("Render log table - Tail ", logsToAppend.length);
 
                     if (logsToAppend.length > 0) {
-                        if (viewMode === 'history' && logsToAppend.length > MAX_LOG_LIMIT) {
+                        // In history mode, if a large backlog has accumulated, force a
+                        // clean reset rather than appending thousands of rows at once.
+                        if (viewMode === 'history' && logsToAppend.length > 1000) {
                             enterLiveMode({ forceReset: true });
                             return;
                         }
@@ -1894,9 +1900,10 @@
                         logsToAppend.forEach(log => fragment.appendChild(createLogRow(log, cachedColumns)));
                         logTableBody.appendChild(fragment);
 
-                        const domLimit = viewMode === 'live' ? MAX_LOG_LIMIT : HISTORY_DOM_LIMIT;
+                        // Bidirectional sliding window: after appending newer rows,
+                        // trim the oldest rows (head) from the opposite end.
                         const rows = logTableBody.querySelectorAll('tr[data-log-id]');
-                        const excess = rows.length - domLimit;
+                        const excess = rows.length - HISTORY_DOM_LIMIT;
                         if (excess > 0) {
                             for (let i = 0; i < excess; i++) {
                                 if (rows[i]) rows[i].remove();
