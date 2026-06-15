@@ -455,9 +455,8 @@
             padding: 0.75rem 1rem;
             background-color: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
-            position: sticky;
-            top: 0;
-            z-index: 99;
+            position: relative;  /* anchor for the column dropdown */
+            flex-shrink: 0;      /* keep the toolbar at its natural height */
             gap: 1rem;
         }
 
@@ -905,43 +904,43 @@
 
         <!-- Main Log Content -->
         <div class="log-container">
-            <!-- log display area -->
-            <div class="log-entries-container">
-                <!-- unified toolbar -->
-                <div class="log-toolbar">
-                    <div class="toolbar-left">
-                        <span class="toolbar-status" id="loadStatus">Ready</span>
-                        <span class="toolbar-connection status-indicator status-connecting" id="connectionStatus">
-                            <span class="dot"></span>
-                            <span id="statusText">Connecting</span>
-                        </span>
-                        <span class="toolbar-count" id="entryCount">0 Entries</span>
-                        <span class="toolbar-debug" id="debugInfo" title="Raw / Hot / Offline / DOM visible / Display range / Continuity">—</span>
+            <!-- unified toolbar: placed outside the scrollable area so it stays visible -->
+            <div class="log-toolbar">
+                <div class="toolbar-left">
+                    <span class="toolbar-status" id="loadStatus">Ready</span>
+                    <span class="toolbar-connection status-indicator status-connecting" id="connectionStatus">
+                        <span class="dot"></span>
+                        <span id="statusText">Connecting</span>
+                    </span>
+                    <span class="toolbar-count" id="entryCount">0 Entries</span>
+                    <span class="toolbar-debug" id="debugInfo" title="Raw / Hot / Offline / DOM visible / Display range / Continuity">—</span>
+                </div>
+                <div class="toolbar-right">
+                    <span class="toolbar-pending" id="pendingLogsHint" style="display:none;">
+                        <span id="pendingCount">0</span> new
+                        <button onclick="enterLiveMode()">↓ Jump</button>
+                    </span>
+                    <button id="autoScrollBtn" class="auto-scroll-btn active" title="Auto scroll enabled">
+                        <i class="fas fa-arrow-down"></i>
+                        <span>Auto Scroll</span>
+                    </button>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                        <label class="form-check-label" for="autoRefresh">Auto Refresh</label>
                     </div>
-                    <div class="toolbar-right">
-                        <span class="toolbar-pending" id="pendingLogsHint" style="display:none;">
-                            <span id="pendingCount">0</span> new
-                            <button onclick="enterLiveMode()">↓ Jump</button>
-                        </span>
-                        <button id="autoScrollBtn" class="auto-scroll-btn active" title="Auto scroll enabled">
-                            <i class="fas fa-arrow-down"></i>
-                            <span>Auto Scroll</span>
-                        </button>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
-                            <label class="form-check-label" for="autoRefresh">Auto Refresh</label>
-                        </div>
-                        <button class="header-editor-btn" id="headerEditorBtn">
-                            <i class="fas fa-cog"></i> Columns
-                        </button>
-                        <div class="header-editor-dropdown" id="headerEditorDropdown">
-                            <h6>Select Visible Columns</h6>
-                            <div id="columnList"></div>
-                            <button class="btn btn-sm btn-primary mt-2" id="applyColumnBtn">Apply</button>
-                        </div>
+                    <button class="header-editor-btn" id="headerEditorBtn">
+                        <i class="fas fa-cog"></i> Columns
+                    </button>
+                    <div class="header-editor-dropdown" id="headerEditorDropdown">
+                        <h6>Select Visible Columns</h6>
+                        <div id="columnList"></div>
+                        <button class="btn btn-sm btn-primary mt-2" id="applyColumnBtn">Apply</button>
                     </div>
                 </div>
+            </div>
 
+            <!-- log display area -->
+            <div class="log-entries-container">
                 <!-- table -->
                 <div class="table-responsive">
                     <table class="log-table">
