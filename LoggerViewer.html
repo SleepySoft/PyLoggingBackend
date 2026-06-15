@@ -210,9 +210,11 @@
 
         .log-entries-container {
             flex: 1;
-            min-width: 0;              /* enable horizontal scroll inside table-responsive */
+            min-width: 0;              /* prevent wide table from pushing the sidebar out */
             overflow-y: auto;
+            overflow-x: auto;          /* horizontal scroll for the wide log table */
             padding: 1rem;
+            position: relative;        /* containing block for the sticky table header */
         }
 
         .log-entry {
@@ -425,27 +427,6 @@
             flex-wrap: wrap;
         }
 
-        .collapsed-status {
-            display: none;
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            z-index: 1000;
-        }
-
-        .sidebar.collapsed .collapsed-status {
-            display: block;
-        }
-
-        .collapsed-status .status-indicator {
-            padding: 0.15rem 0.5rem;
-            font-size: 0.75rem;
-        }
-
-        .collapsed-status .status-indicator .dot {
-            width: 6px;
-            height: 6px;
-        }
 
         /* header editor styles */
         .log-toolbar {
@@ -763,14 +744,6 @@
     <div class="main-container">
         <!-- Left Sidebar -->
         <div class="sidebar" id="sidebar">
-            <!-- collapsed state status indicator -->
-            <div class="collapsed-status">
-                <span id="collapsedConnectionStatus" class="status-indicator status-connecting">
-                    <span class="dot"></span>
-                    <span id="collapsedStatusText">Connecting</span>
-                </span>
-            </div>
-
             <div class="sidebar-content">
                 <!-- Filters Panel -->
                 <div class="card mb-3">
@@ -941,13 +914,11 @@
 
             <!-- log display area -->
             <div class="log-entries-container">
-                <!-- table -->
-                <div class="table-responsive">
-                    <table class="log-table">
-                        <thead id="logTableHeader"></thead>
-                        <tbody id="logTableBody"></tbody>
-                    </table>
-                </div>
+                <!-- table: wrapped directly by the scrollable container so the sticky header attaches here -->
+                <table class="log-table">
+                    <thead id="logTableHeader"></thead>
+                    <tbody id="logTableBody"></tbody>
+                </table>
             </div>
 
             <div id="scrollToBottom" class="scroll-to-bottom" title="Scroll to bottom">
@@ -1205,33 +1176,23 @@
         // update connection status
         function updateConnectionStatus(status) {
             const statusElement = document.getElementById('connectionStatus');
-            const collapsedStatusElement = document.getElementById('collapsedConnectionStatus');
             statusElement.className = 'toolbar-connection status-indicator';
-            collapsedStatusElement.className = 'status-indicator';
             switch(status) {
                 case 'connected':
                     statusElement.classList.add('status-connected');
                     statusElement.innerHTML = '<span class="dot"></span><span>Connected</span>';
-                    collapsedStatusElement.classList.add('status-connected');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Connected</span>';
                     break;
                 case 'connecting':
                     statusElement.classList.add('status-connecting');
                     statusElement.innerHTML = '<span class="dot"></span><span>Connecting...</span>';
-                    collapsedStatusElement.classList.add('status-connecting');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Connecting...</span>';
                     break;
                 case 'disconnected':
                     statusElement.classList.add('status-disconnected');
                     statusElement.innerHTML = '<span class="dot"></span><span>Disconnected</span>';
-                    collapsedStatusElement.classList.add('status-disconnected');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Disconnected</span>';
                     break;
                 case 'error':
                     statusElement.classList.add('status-disconnected');
                     statusElement.innerHTML = '<span class="dot"></span><span>Connection Error</span>';
-                    collapsedStatusElement.classList.add('status-disconnected');
-                    collapsedStatusElement.innerHTML = '<span class="dot"></span><span>Connection Error</span>';
                     break;
             }
         }
