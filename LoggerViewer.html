@@ -954,6 +954,7 @@
 
         // View mode state machine: 'live' | 'history'
         let viewMode = 'live';
+        let isSidebarTransitioning = false;  // ignore scroll events during sidebar collapse/expand
 
         // In live mode, DOM rows are pruned to this limit to keep rendering fast.
         const MAX_LOG_LIMIT = 5000;
@@ -1020,7 +1021,20 @@
 
         // Toggle sidebar collapse/expand
         function toggleSidebar() {
+            const wasLive = viewMode === 'live';
+            isSidebarTransitioning = true;
             document.getElementById('sidebar').classList.toggle('collapsed');
+            // The sidebar transition takes 0.3s; ignore scroll events until it finishes
+            // so that width/height changes do not accidentally switch us into history mode.
+            // If the user was in live mode, restore the bottom scroll position after the
+            // transition so that auto-refresh keeps working.
+            setTimeout(() => {
+                isSidebarTransitioning = false;
+                if (wasLive) {
+                    scrollToBottom();
+                }
+                checkScrollPosition();
+            }, 350);
         }
 
         // Setup Intersection Observer for infinite scroll
@@ -1069,6 +1083,7 @@
         }
 
         function checkScrollPosition() {
+            if (isSidebarTransitioning) return;
             const container = document.querySelector('.log-entries-container');
             const scrollTop = container.scrollTop;
             const scrollHeight = container.scrollHeight;
