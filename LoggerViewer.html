@@ -49,10 +49,24 @@
             min-height: 0;
         }
 
+        .filters-card {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .filters-card > .card-body {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+
         .module-panel {
             flex: 1 1 auto;
-            min-height: 150px;
-            max-height: 600px;       /* give more room when the module tree has content */
+            min-height: 250px;
             display: flex;
             flex-direction: column;
             margin-bottom: 0;
@@ -267,10 +281,6 @@
         .badge-ERROR { background-color: #dc3545; }
         .badge-CRITICAL { background-color: #6f42c1; }
 
-        .filter-section {
-            margin-bottom: 1rem;
-        }
-
         .form-check-input:checked {
             background-color: #0d6efd;
             border-color: #0d6efd;
@@ -280,15 +290,6 @@
             height: 1px;
             width: 100%;
             visibility: hidden;
-        }
-
-        .stats-item {
-            margin-bottom: 0.5rem;
-        }
-
-        .stats-value {
-            font-weight: bold;
-            float: right;
         }
 
         .status-indicator {
@@ -750,70 +751,38 @@
         <div class="sidebar" id="sidebar">
             <div class="sidebar-content">
                 <!-- Filters Panel -->
-                <div class="card mb-3">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <div class="card mb-3 filters-card">
+                    <div class="card-header bg-primary text-white">
                         <span><i class="fas fa-filter"></i> Filters</span>
-                        <button class="btn btn-sm btn-light" onclick="refreshModules()">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
                     </div>
                     <div class="card-body">
-                        <!-- Level Filter - Multi-select -->
-                        <div class="filter-section">
-                            <label class="form-label fw-bold">Log Levels:</label>
-                            <div class="form-check">
-                                <input class="form-check-input level-checkbox" type="checkbox" value="DEBUG" id="level-debug" checked>
-                                <label class="form-check-label" for="level-debug">DEBUG</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input level-checkbox" type="checkbox" value="INFO" id="level-info" checked>
-                                <label class="form-check-label" for="level-info">INFO</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input level-checkbox" type="checkbox" value="WARNING" id="level-warning" checked>
-                                <label class="form-check-label" for="level-warning">WARNING</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input level-checkbox" type="checkbox" value="ERROR" id="level-error" checked>
-                                <label class="form-check-label" for="level-error">ERROR</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input level-checkbox" type="checkbox" value="CRITICAL" id="level-critical" checked>
-                                <label class="form-check-label" for="level-critical">CRITICAL</label>
-                            </div>
-                        </div>
-
-                        <!-- module tree configuration panel -->
+                        <!-- Level Filter -->
                         <div class="card mb-3">
                             <div class="card-header bg-info text-white">
-                                <i class="fas fa-cog"></i> Module Configuration
+                                <i class="fas fa-layer-group"></i> Level Filter
                             </div>
                             <div class="card-body">
-                                <div class="mb-3">
-                                    <label class="form-label">Level 1 Column:</label>
-                                    <select class="form-select" id="moduleLevel1">
-                                        <option value="">-- Select Column --</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Level 2 Column:</label>
-                                    <select class="form-select" id="moduleLevel2">
-                                        <option value="">-- Select Column --</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Level 3 Column:</label>
-                                    <select class="form-select" id="moduleLevel3">
-                                        <option value="">-- Select Column --</option>
-                                    </select>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshColumnOptions()">
-                                        <i class="fas fa-sync-alt"></i> Refresh Columns
-                                    </button>
-                                    <button class="btn btn-sm btn-primary" onclick="generateModuleTree()">
-                                        <i class="fas fa-tree"></i> Generate Tree
-                                    </button>
+                                <div class="d-flex flex-wrap gap-3">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input level-checkbox" type="checkbox" value="DEBUG" id="level-debug" checked>
+                                        <label class="form-check-label" for="level-debug">DEBUG</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input level-checkbox" type="checkbox" value="INFO" id="level-info" checked>
+                                        <label class="form-check-label" for="level-info">INFO</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input level-checkbox" type="checkbox" value="WARNING" id="level-warning" checked>
+                                        <label class="form-check-label" for="level-warning">WARNING</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input level-checkbox" type="checkbox" value="ERROR" id="level-error" checked>
+                                        <label class="form-check-label" for="level-error">ERROR</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input level-checkbox" type="checkbox" value="CRITICAL" id="level-critical" checked>
+                                        <label class="form-check-label" for="level-critical">CRITICAL</label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -830,7 +799,7 @@
                                     </div>
                                 </div>
                                 <div class="module-filter-header-bottom">
-                                    <small class="header-hint">Filter logs by module</small>
+                                    <small class="header-hint">Built from <code>module.name</code></small>
                                     <div class="btn-group btn-group-sm">
                                         <button class="btn btn-light" onclick="toggleAllModules(true)" title="Select All">
                                             <i class="fas fa-check-square"></i>
@@ -844,6 +813,11 @@
                                     </div>
                                 </div>
                             </div>
+                          <div class="p-2 border-bottom bg-light">
+                              <button class="btn btn-primary w-100" onclick="generateModuleTree()">
+                                  <i class="fas fa-tree"></i> Generate Module Tree
+                              </button>
+                          </div>
                           <div class="card-body">
                             <div class="module-tree" id="moduleTree"></div>
                           </div>
@@ -858,19 +832,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Statistics -->
-                <div class="card">
-                    <div class="card-header bg-info text-white">
-                        <i class="fas fa-chart-bar"></i> Statistics
-                    </div>
-                    <div class="card-body" id="statsPanel">
-                        <div class="text-center text-muted">
-                            <i class="fas fa-spinner fa-spin"></i> Loading statistics...
-                        </div>
-                    </div>
-                </div>
-
 
             </div>
         </div>
@@ -982,7 +943,6 @@
             initHeaderEditor();
             setupDragAndDrop();
             initModuleSystem();
-            setInterval(updateStats, 30000);
         });
 
         window.addEventListener('beforeunload', () => {
@@ -1217,59 +1177,6 @@
                     statusElement.innerHTML = '<span class="dot"></span><span>Connection Error</span>';
                     break;
             }
-        }
-
-        // Update statistics panel
-        function updateStats() {
-            fetch('/logger/api/stats')
-                .then(response => {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.json();
-                })
-                .then(data => {
-                    let html = `
-                        <div class="stats-item">
-                            <span>Total Entries:</span>
-                            <span class="stats-value">${data.totalEntries.toLocaleString()}</span>
-                        </div>
-                        <div class="stats-item">
-                            <strong>Level Distribution:</strong>
-                    `;
-                    for (const [level, count] of Object.entries(data.levelCounts)) {
-                        const percentage = data.totalEntries > 0 ?
-                            ((count / data.totalEntries) * 100).toFixed(1) : 0;
-                        html += `
-                            <div class="stats-item">
-                                <span>${level}:</span>
-                                <span class="stats-value">${count.toLocaleString()} (${percentage}%)</span>
-                            </div>
-                        `;
-                    }
-                    html += `</div>`;
-                    // Add module statistics if available
-                    if (data.moduleCounts) {
-                        html += `<div class="stats-item"><strong>Top Modules:</strong></div>`;
-                        const sortedModules = Object.entries(data.moduleCounts)
-                            .sort((a, b) => b[1] - a[1])
-                            .slice(0, 5); // Show top 5 modules
-                        sortedModules.forEach(([module, count]) => {
-                            const percentage = data.totalEntries > 0 ?
-                                ((count / data.totalEntries) * 100).toFixed(1) : 0;
-                            html += `
-                                <div class="stats-item">
-                                    <span>${module}:</span>
-                                    <span class="stats-value">${count.toLocaleString()} (${percentage}%)</span>
-                                </div>
-                            `;
-                        });
-                    }
-                    document.getElementById('statsPanel').innerHTML = html;
-                })
-                .catch(error => {
-                    console.error('Error fetching stats:', error);
-                    document.getElementById('statsPanel').innerHTML =
-                        '<div class="text-center text-danger">Error loading statistics</div>';
-                });
         }
 
         // initialize header editor
@@ -2004,20 +1911,11 @@
 
             // refresh column options after log loading
         function loadInitialData() {
-            updateStats();
             fetchLogsToCache(null, currentLimit)
                 .then(data => {
                     updateDisplayFromCache({ reset: true });
                     if (data.logs && data.logs.length) {
                         setTimeout(() => scrollToBottom(), 100);
-                    }
-
-                    // refresh column options after log loading
-                    refreshColumnOptions();
-
-                    // try to set default module hierarchy
-                    if (availableColumns.includes('module')) {
-                        document.getElementById('moduleLevel1').value = 'module';
                     }
 
                     setupEventSource();
@@ -2076,11 +1974,6 @@
 
         // ----------------------------------------- Filter Related -----------------------------------------
 
-        // module hierarchy config
-        let moduleLevel1 = 'module';
-        let moduleLevel2 = 'name';
-        let moduleLevel3 = 'funcName';
-
         let selectedLevels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'];
         let selectedModules = [];
 
@@ -2089,67 +1982,16 @@
         // store all node paths
         let allModulePaths = [];
 
-        // refresh column option dropdowns
-        function refreshColumnOptions() {
-            const level1Select = document.getElementById('moduleLevel1');
-            const level2Select = document.getElementById('moduleLevel2');
-            const level3Select = document.getElementById('moduleLevel3');
-
-            // save currently selected values
-            const currentLevel1 = level1Select.value;
-            const currentLevel2 = level2Select.value;
-            const currentLevel3 = level3Select.value;
-
-            // clear options
-            level1Select.innerHTML = '<option value="">-- Select Column --</option>';
-            level2Select.innerHTML = '<option value="">-- Select Column --</option>';
-            level3Select.innerHTML = '<option value="">-- Select Column --</option>';
-
-            // add new options
-            availableColumns.forEach(column => {
-                const option1 = document.createElement('option');
-                option1.value = column;
-                option1.textContent = column;
-                if (column === currentLevel1) option1.selected = true;
-                level1Select.appendChild(option1);
-
-                const option2 = document.createElement('option');
-                option2.value = column;
-                option2.textContent = column;
-                if (column === currentLevel2) option2.selected = true;
-                level2Select.appendChild(option2);
-
-                const option3 = document.createElement('option');
-                option3.value = column;
-                option3.textContent = column;
-                if (column === currentLevel3) option3.selected = true;
-                level3Select.appendChild(option3);
-            });
-
-            document.getElementById('moduleLevel1').value = moduleLevel1;
-            document.getElementById('moduleLevel2').value = moduleLevel2;
-            document.getElementById('moduleLevel3').value = moduleLevel3;
-        }
-
-        // generate module tree
+        // generate module tree from canonical module.name fields
         function generateModuleTree() {
-            const level1 = document.getElementById('moduleLevel1').value;
-            const level2 = document.getElementById('moduleLevel2').value;
-            const level3 = document.getElementById('moduleLevel3').value;
-
-            if (!level1 && !level2 && !level3) {
-                alert('Please select at least one column for module hierarchy');
-                return;
-            }
-
-            moduleLevel1 = level1;
-            moduleLevel2 = level2;
-            moduleLevel3 = level3;
-
             buildModuleHierarchy();
         }
 
         // build module hierarchy
+        // NOTE: the backend module filter matches against the canonical
+        // `module.name` string. To keep the tree selection consistent with
+        // server-side filtering we always build the tree from `module` and
+        // `name`, ignoring the display-level dropdown configuration.
         function buildModuleHierarchy() {
             const hierarchy = {};
 
@@ -2158,15 +2000,13 @@
             allLogs.forEach(log => {
                 let path = [];
 
-            // add path elements according to configured levels
-                if (moduleLevel1 && log[moduleLevel1]) {
-                    path.push(log[moduleLevel1]);
+                // use canonical module.name fields so selected paths map
+                // directly to the backend filter values
+                if (log.module) {
+                    path.push(log.module);
                 }
-                if (moduleLevel2 && log[moduleLevel2]) {
-                    path.push(log[moduleLevel2]);
-                }
-                if (moduleLevel3 && log[moduleLevel3]) {
-                    path.push(log[moduleLevel3]);
+                if (log.name) {
+                    path.push(log.name);
                 }
 
                 // build tree structure - add empty path check

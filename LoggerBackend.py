@@ -182,7 +182,9 @@ class LoggerBackend:
                 return False
             if not module_filter:
                 return True
-            full = (entry.get('module', '') + '.' + entry.get('name', ''))
+            module = entry.get('module', '')
+            name = entry.get('name', '')
+            full = '.'.join([p for p in (module, name) if p])
             matched = any(
                 rule == full or (rule.endswith('.*') and (full == rule[:-2] or full.startswith(rule[:-2] + '.')))
                 for rule in module_filter
