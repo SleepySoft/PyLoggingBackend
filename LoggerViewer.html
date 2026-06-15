@@ -1061,8 +1061,8 @@
 
                     // Check if there are older logs in hot/offline buffer not yet displayed
                     const hasOlderInHotBuffer = hotBuffer.length > 0 && displayMinId > hotBuffer[0]._id;
-                    const hasOlderInOfflineBuffer = offlineBuffer.segments.length > 0 &&
-                        displayMinId > offlineBuffer.segments[offlineBuffer.segments.length - 1].startId;
+                    const hasOlderInOfflineBuffer = offlineBuffer.logs.length > 0 &&
+                        displayMinId > offlineBuffer.startId;
                     const canLoadMoreFromCache = hasOlderInHotBuffer || hasOlderInOfflineBuffer;
 
                     if (entry.isIntersecting          // element enters viewport
@@ -1634,10 +1634,13 @@
         const HOT_BUFFER_LIMIT = 2000;
 
         // --- Layer 3: Offline Buffer ---
+        // Single contiguous segment of older logs that sits immediately before the hot buffer.
+        // If it ever drifts apart from the hot buffer, it is discarded entirely.
         let offlineBuffer = {
-            segments: [],            // [{startId, endId, logs: [...]}, ...], newest at index 0
-            totalSize: 0,
-            maxTotalSize: 5000
+            logs: [],                // oldest visible logs, sorted by _id ascending
+            startId: null,
+            endId: null,
+            maxSize: 2000            // small, because scrolling is continuous
         };
 
         // display boundaries
@@ -1727,68 +1730,56 @@
             migrateToOfflineBuffer(evicted);
         }
 
-        // When hot buffer evicts oldest visible logs, try to move them into offline buffer.
-        // This reduces backend fetches when the user scrolls up.
+        // When hot buffer evicts oldest visible logs, move them into the single offline segment.
+        // If the eviction is not contiguous, replace the offline buffer with the evicted logs.
         function migrateToOfflineBuffer(logs) {
             if (logs.length === 0) return;
             const evictedMinId = logs[0]._id;
-            const evictedMaxId = logs[logs.length - 1]._id;
 
-            if (offlineBuffer.segments.length === 0) {
-                offlineBuffer.segments.push({
-                    startId: evictedMinId,
-                    endId: evictedMaxId,
-                    logs: logs
-                });
-                offlineBuffer.totalSize += logs.length;
-                trimOfflineBuffer();
-                return;
-            }
-
-            const newestSegment = offlineBuffer.segments[0];
-            if (evictedMaxId + 1 === newestSegment.startId) {
-                // Continuous: prepend evicted logs to the newest segment
-                newestSegment.logs = logs.concat(newestSegment.logs);
-                newestSegment.startId = evictedMinId;
-                offlineBuffer.totalSize += logs.length;
+            if (offlineBuffer.logs.length === 0 || offlineBuffer.endId + 1 === evictedMinId) {
+                // Continuous: append evicted logs (they are older than what is already offline)
+                offlineBuffer.logs = offlineBuffer.logs.concat(logs);
             } else {
-                console.log('Hot buffer eviction discontinuous with offline buffer, dropping', logs.length, 'logs');
+                // Discontinuous: keep only the newest evicted logs
+                console.log('Hot buffer eviction discontinuous with offline buffer, replacing with', logs.length, 'logs');
+                offlineBuffer.logs = logs.slice();
             }
+            offlineBuffer.startId = offlineBuffer.logs[0]._id;
+            offlineBuffer.endId = offlineBuffer.logs[offlineBuffer.logs.length - 1]._id;
             trimOfflineBuffer();
         }
 
         function trimOfflineBuffer() {
-            while (offlineBuffer.totalSize > offlineBuffer.maxTotalSize && offlineBuffer.segments.length > 0) {
-                const oldest = offlineBuffer.segments.pop();
-                offlineBuffer.totalSize -= oldest.logs.length;
+            if (offlineBuffer.logs.length > offlineBuffer.maxSize) {
+                offlineBuffer.logs = offlineBuffer.logs.slice(-offlineBuffer.maxSize);
+                offlineBuffer.startId = offlineBuffer.logs[0]._id;
+                offlineBuffer.endId = offlineBuffer.logs[offlineBuffer.logs.length - 1]._id;
             }
         }
 
-        function addOfflineSegment(logs) {
+        // Replace the offline buffer with a freshly fetched history batch.
+        function setOfflineBuffer(logs) {
             if (logs.length === 0) return;
-            const segment = {
-                startId: logs[0]._id,
-                endId: logs[logs.length - 1]._id,
-                logs: logs
-            };
-            offlineBuffer.segments.unshift(segment);
-            offlineBuffer.totalSize += logs.length;
+            offlineBuffer.logs = logs.slice();
+            offlineBuffer.startId = logs[0]._id;
+            offlineBuffer.endId = logs[logs.length - 1]._id;
             trimOfflineBuffer();
         }
 
         // Continuity check: hot buffer must seamlessly connect to offline buffer.
         // If they drift apart (e.g. filter changed, or long disconnect), discard offline buffer.
         function isCacheContinuous() {
-            if (offlineBuffer.segments.length === 0) return true;
+            if (offlineBuffer.logs.length === 0) return true;
             if (hotBuffer.length === 0) return true;
-            return hotBuffer[0]._id === offlineBuffer.segments[0].endId + 1;
+            return hotBuffer[0]._id === offlineBuffer.endId + 1;
         }
 
         function ensureCacheContinuity() {
             if (!isCacheContinuous()) {
                 console.log('Cache discontinuity detected — clearing offline buffer');
-                offlineBuffer.segments = [];
-                offlineBuffer.totalSize = 0;
+                offlineBuffer.logs = [];
+                offlineBuffer.startId = null;
+                offlineBuffer.endId = null;
             }
         }
 
@@ -1828,9 +1819,9 @@
                             const visible = logs.filter(isLogVisible);
                             if (visible.length > 0) {
                                 mergeToHotBuffer(visible);
-                                // 3. History fetches also go into offline buffer
+                                // 3. History fetches replace the offline buffer
                                 if (isHistoryFetch) {
-                                    addOfflineSegment(visible);
+                                    setOfflineBuffer(visible);
                                 }
                             }
                         }
@@ -1855,8 +1846,8 @@
         // Build the full visible cache by merging offline buffer (oldest) + hot buffer (newest)
         function buildFullVisibleCache() {
             const result = [];
-            for (let i = offlineBuffer.segments.length - 1; i >= 0; i--) {
-                result.push(...offlineBuffer.segments[i].logs);
+            if (offlineBuffer.logs.length > 0) {
+                result.push(...offlineBuffer.logs);
             }
             result.push(...hotBuffer);
             return result;
@@ -1983,8 +1974,7 @@
 
                 const rawCount = rawCache.length;
                 const hotCount = hotBuffer.length;
-                const offlineSegs = offlineBuffer.segments.length;
-                const offlineTotal = offlineBuffer.totalSize;
+                const offlineTotal = offlineBuffer.logs.length;
                 const continuous = isCacheContinuous();
                 const allRows = logTableBody.querySelectorAll('tr[data-log-id]');
                 let visibleDom = 0;
@@ -1993,7 +1983,7 @@
                 debugEl.textContent =
                     `Raw:${rawCount.toLocaleString()} ` +
                     `Hot:${hotCount.toLocaleString()} ` +
-                    `Off:${offlineSegs}/${offlineTotal.toLocaleString()} ` +
+                    `Off:${offlineTotal.toLocaleString()} ` +
                     `DOM:${visibleDom}/${allRows.length} ` +
                     `Range:[${displayMinId ?? '-'},${displayMaxId ?? '-'}] ` +
                     `${continuous ? 'Cont✓' : 'Cont✗'}`;
@@ -2012,13 +2002,10 @@
             }
 
             // 2. Offline buffer has older history?
-            if (offlineBuffer.segments.length > 0) {
-                const oldestSegment = offlineBuffer.segments[offlineBuffer.segments.length - 1];
-                if (displayMinId > oldestSegment.startId) {
-                    console.log("Loading more logs from offline buffer...");
-                    updateDisplayFromCache();
-                    return;
-                }
+            if (offlineBuffer.logs.length > 0 && displayMinId > offlineBuffer.startId) {
+                console.log("Loading more logs from offline buffer...");
+                updateDisplayFromCache();
+                return;
             }
 
             // 3. Fetch from backend
