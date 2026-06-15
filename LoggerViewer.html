@@ -1633,6 +1633,9 @@
         let hotBufferMap = new Map();
         const HOT_BUFFER_LIMIT = 2000;
 
+        // --- Log arrival rate tracking ---
+        let logRateSamples = [];  // [{time: ms, count: number}] for the last few seconds
+
         // --- Layer 3: Offline Buffer ---
         // Single contiguous segment of older logs that sits immediately before the hot buffer.
         // If it ever drifts apart from the hot buffer, it is discarded entirely.
@@ -1649,9 +1652,33 @@
         let moduleFilterMode = 'exclude';   // 'include' | 'exclude'
 
         // --- Merge entry point: new logs arrive → rawCache → hotBuffer ---
+        function recordLogRate(count) {
+            const now = Date.now();
+            const last = logRateSamples[logRateSamples.length - 1];
+            if (last && now - last.time < 1000) {
+                last.count += count;
+            } else {
+                logRateSamples.push({ time: now, count });
+            }
+            // Keep samples from the last 5 seconds
+            const cutoff = now - 5000;
+            while (logRateSamples.length > 0 && logRateSamples[0].time < cutoff) {
+                logRateSamples.shift();
+            }
+        }
+
+        function getLogRate() {
+            const now = Date.now();
+            const cutoff = now - 1000;
+            return logRateSamples
+                .filter(s => s.time >= cutoff)
+                .reduce((sum, s) => sum + s.count, 0);
+        }
+
         function mergeLogsToCache(newLogs) {
             if (!newLogs || newLogs.length === 0) return;
             const logs = Array.isArray(newLogs) ? newLogs : [newLogs];
+            recordLogRate(logs.length);
 
             // 1. Merge full payload into raw cache
             mergeToRawCache(logs);
@@ -1980,7 +2007,10 @@
                 let visibleDom = 0;
                 allRows.forEach(row => { if (row.style.display !== 'none') visibleDom++; });
 
+                const rate = getLogRate();
+
                 debugEl.textContent =
+                    `Rate:${rate.toLocaleString()}/s ` +
                     `All:${rawCount.toLocaleString()} ` +
                     `Visible:${hotCount.toLocaleString()} ` +
                     `History:${offlineTotal.toLocaleString()} ` +
@@ -1989,6 +2019,7 @@
                     `${continuous ? 'Connected' : 'Gap'}`;
 
                 debugEl.title =
+                    `Rate: ${rate.toLocaleString()} logs/sec (last 1s)\n` +
                     `All (raw cache): ${rawCount.toLocaleString()}\n` +
                     `Visible (after filters): ${hotCount.toLocaleString()}\n` +
                     `History (offline cache): ${offlineTotal.toLocaleString()}\n` +
