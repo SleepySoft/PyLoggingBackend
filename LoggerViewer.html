@@ -200,6 +200,7 @@
 
         .log-container {
             flex: 1;
+            min-width: 0;              /* allow flex item to shrink below table content width */
             height: 100vh;
             display: flex;
             flex-direction: column;
@@ -209,6 +210,7 @@
 
         .log-entries-container {
             flex: 1;
+            min-width: 0;              /* enable horizontal scroll inside table-responsive */
             overflow-y: auto;
             padding: 1rem;
         }
@@ -626,7 +628,9 @@
             font-weight: 600;
             border-bottom: 2px solid #dee2e6;
             cursor: pointer;
-            position: relative;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
         .log-table th:hover {
@@ -641,8 +645,18 @@
             white-space: nowrap;    /* columns size to content, scroll horizontally */
         }
 
+        /* The message column can be very long; let it wrap so the table does not
+           become infinitely wide, while other columns stay compact and nowrap. */
+        .log-table td.col-message {
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            max-width: 800px;
+        }
+
         .table-responsive {
             overflow-x: auto;
+            width: 100%;               /* keep the scroller bound to the available width */
             -webkit-overflow-scrolling: touch;
         }
 
