@@ -633,10 +633,12 @@
             background-color: #e9ecef;
         }
 
+        .log-table th,
         .log-table td {
             padding: 0.75rem;
             border-bottom: 1px solid #dee2e6;
             vertical-align: top;
+            white-space: nowrap;    /* columns size to content, scroll horizontally */
         }
 
         .table-responsive {
@@ -1281,8 +1283,13 @@
             if (savedSettings) {
                 try {
                     const settings = JSON.parse(savedSettings);
-                    if (settings.visibleColumns) visibleColumns = settings.visibleColumns;
-                    if (settings.columnOrder) columnOrder = settings.columnOrder;
+                    // Guard against corrupted/empty settings that would hide the header.
+                    if (settings.visibleColumns && Array.isArray(settings.visibleColumns) && settings.visibleColumns.length > 0) {
+                        visibleColumns = settings.visibleColumns;
+                    }
+                    if (settings.columnOrder && Array.isArray(settings.columnOrder) && settings.columnOrder.length > 0) {
+                        columnOrder = settings.columnOrder;
+                    }
                 } catch (e) {
                     console.error('Error loading column settings:', e);
                 }
