@@ -911,6 +911,8 @@
         let moduleHierarchy = {}; // Store module hierarchy data
         let lastScrollTop = 0;      // last scrollbar position
         let isScrollingUp = false;  // scroll direction
+        let pendingScrollCheck = false; // throttle scroll events with rAF
+        let isRendering = false;        // guard against re-entrant display updates
         let logTableBody = null
 
         // View mode state machine: 'live' | 'history'
@@ -924,6 +926,10 @@
         // DOM ceiling as live mode. Rows are trimmed from the opposite end of the
         // scroll direction so the DOM never grows beyond this limit.
         const HISTORY_DOM_LIMIT = 2000;
+
+        // Chunk size for appending rows during history->live transition.
+        // Smaller chunks keep the UI responsive when a large backlog arrives.
+        const APPEND_CHUNK_SIZE = 300;
 
 
 
@@ -1041,6 +1047,15 @@
         }
 
         function checkScrollPosition() {
+            if (pendingScrollCheck) return;
+            pendingScrollCheck = true;
+            requestAnimationFrame(() => {
+                pendingScrollCheck = false;
+                checkScrollPositionImpl();
+            });
+        }
+
+        function checkScrollPositionImpl() {
             if (isSidebarTransitioning) return;
             const container = document.querySelector('.log-entries-container');
             const scrollTop = container.scrollTop;
@@ -1093,8 +1108,13 @@
             const currentRows = logTableBody.querySelectorAll('tr[data-log-id]').length;
             // With the bidirectional sliding window, history DOM is also capped at
             // MAX_LOG_LIMIT. If the DOM is at or above the cap, force a clean reset
-            // to avoid incremental append over a full window.
-            const shouldForceReset = options.forceReset || currentRows >= MAX_LOG_LIMIT;
+            // to avoid incremental append over a full window — unless we are already
+            // near the hot-buffer tail, in which case a smooth continuation is fine.
+            const hotTailId = hotBuffer.length > 0 ? hotBuffer[hotBuffer.length - 1]._id : null;
+            const nearHotTail = hotTailId !== null && displayMaxId !== null &&
+                (hotTailId - displayMaxId) < MAX_LOG_LIMIT;
+            const shouldForceReset = options.forceReset ||
+                (currentRows >= MAX_LOG_LIMIT && !nearHotTail);
 
             viewMode = 'live';
             autoScrollEnabled = true;
@@ -1722,12 +1742,9 @@
 
         // Build the full visible cache by merging offline buffer (oldest) + hot buffer (newest)
         function buildFullVisibleCache() {
-            const result = [];
-            if (offlineBuffer.logs.length > 0) {
-                result.push(...offlineBuffer.logs);
-            }
-            result.push(...hotBuffer);
-            return result;
+            if (offlineBuffer.logs.length === 0) return hotBuffer.slice();
+            if (hotBuffer.length === 0) return offlineBuffer.logs.slice();
+            return [...offlineBuffer.logs, ...hotBuffer];
         }
 
          /**
@@ -1735,91 +1752,103 @@
          * @param {object} [options={}] - update options
          * @param {boolean} [options.reset=false] - if true, force full re-render
          */
-        function updateDisplayFromCache(options = {}) {
-            const { reset = false } = options;
-            const fullCache = buildFullVisibleCache();
+        async function updateDisplayFromCache(options = {}) {
+            if (isRendering) return;
+            isRendering = true;
 
-            if (fullCache.length === 0) {
-                clearLogTable();
-                displayMinId = null;
-                displayMaxId = null;
-                totalEntries = 0;
-                document.getElementById('entryCount').textContent = `0 Entries`;
-                return;
-            }
+            try {
+                const { reset = false } = options;
+                const fullCache = buildFullVisibleCache();
 
-            const newDisplayMinId = fullCache[0]._id;
-            const newDisplayMaxId = fullCache[fullCache.length - 1]._id;
+                if (fullCache.length === 0) {
+                    clearLogTable();
+                    displayMinId = null;
+                    displayMaxId = null;
+                    totalEntries = 0;
+                    document.getElementById('entryCount').textContent = `0 Entries`;
+                    return;
+                }
 
-            if (reset || displayMinId === null) {
-                console.log("Render log table - FULL.");
-                const renderLimit = 2000;
-                const logsToRender = fullCache.length > renderLimit
-                    ? fullCache.slice(-renderLimit)
-                    : fullCache;
-                renderTableBody(logsToRender);
-            }
-            else {
-                // prepend to head
-                if (newDisplayMinId < displayMinId) {
-                    const logsToPrepend = fullCache.filter(log => log._id < displayMinId);
-                    console.log("Render log table - Head ", logsToPrepend.length);
+                const newDisplayMinId = fullCache[0]._id;
+                const newDisplayMaxId = fullCache[fullCache.length - 1]._id;
 
-                    if (logsToPrepend.length > 0) {
-                        const beforeHeight = logTableBody.scrollHeight;
-                        prependTableRows(logsToPrepend);
-                        const afterHeight = logTableBody.scrollHeight;
-                        document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
+                if (reset || displayMinId === null) {
+                    console.log("Render log table - FULL.");
+                    const renderLimit = 2000;
+                    const logsToRender = fullCache.length > renderLimit
+                        ? fullCache.slice(-renderLimit)
+                        : fullCache;
+                    renderTableBody(logsToRender);
+                }
+                else {
+                    // prepend to head
+                    if (newDisplayMinId < displayMinId) {
+                        const logsToPrepend = fullCache.filter(log => log._id < displayMinId);
+                        console.log("Render log table - Head ", logsToPrepend.length);
 
-                        // Bidirectional sliding window: after prepending older rows,
-                        // trim the newest rows (tail) from the opposite end.
-                        const rows = logTableBody.querySelectorAll('tr[data-log-id]');
-                        const excess = rows.length - HISTORY_DOM_LIMIT;
-                        if (excess > 0) {
-                            for (let i = 0; i < excess; i++) {
-                                const idx = rows.length - 1 - i;
-                                if (rows[idx]) rows[idx].remove();
+                        if (logsToPrepend.length > 0) {
+                            const beforeHeight = logTableBody.scrollHeight;
+                            prependTableRows(logsToPrepend);
+                            const afterHeight = logTableBody.scrollHeight;
+                            document.querySelector('.log-entries-container').scrollTop += afterHeight - beforeHeight;
+
+                            // Bidirectional sliding window: after prepending older rows,
+                            // trim the newest rows (tail) from the opposite end.
+                            const rows = logTableBody.querySelectorAll('tr[data-log-id]');
+                            const excess = rows.length - HISTORY_DOM_LIMIT;
+                            if (excess > 0) {
+                                for (let i = 0; i < excess; i++) {
+                                    const idx = rows.length - 1 - i;
+                                    if (rows[idx]) rows[idx].remove();
+                                }
+                            }
+                        }
+                    }
+
+                    // append to tail
+                    if (newDisplayMaxId > displayMaxId) {
+                        const logsToAppend = fullCache.filter(log => log._id > displayMaxId);
+                        console.log("Render log table - Tail ", logsToAppend.length);
+
+                        if (logsToAppend.length > 0) {
+                            const wasNearBottom = isNearBottom;
+                            const cachedColumns = columnOrder.filter(col => visibleColumns.includes(col));
+
+                            // Chunk large appends across rAF frames to keep scrolling smooth.
+                            for (let i = 0; i < logsToAppend.length; i += APPEND_CHUNK_SIZE) {
+                                const chunk = logsToAppend.slice(i, i + APPEND_CHUNK_SIZE);
+                                const fragment = document.createDocumentFragment();
+                                chunk.forEach(log => fragment.appendChild(createLogRow(log, cachedColumns)));
+                                logTableBody.appendChild(fragment);
+
+                                // Bidirectional sliding window: trim oldest rows.
+                                const rows = logTableBody.querySelectorAll('tr[data-log-id]');
+                                const excess = rows.length - HISTORY_DOM_LIMIT;
+                                if (excess > 0) {
+                                    for (let j = 0; j < excess; j++) {
+                                        if (rows[j]) rows[j].remove();
+                                    }
+                                }
+
+                                if (i + APPEND_CHUNK_SIZE < logsToAppend.length) {
+                                    await new Promise(resolve => requestAnimationFrame(resolve));
+                                }
+                            }
+
+                            if (autoScrollEnabled && wasNearBottom) {
+                                scrollToBottom();
                             }
                         }
                     }
                 }
 
-                // append to tail
-                if (newDisplayMaxId > displayMaxId) {
-                    const logsToAppend = fullCache.filter(log => log._id > displayMaxId);
-                    console.log("Render log table - Tail ", logsToAppend.length);
-
-                    if (logsToAppend.length > 0) {
-                        // In history mode, if a large backlog has accumulated, force a
-                        // clean reset rather than appending thousands of rows at once.
-                        if (viewMode === 'history' && logsToAppend.length > 1000) {
-                            enterLiveMode({ forceReset: true });
-                            return;
-                        }
-
-                        const wasNearBottom = isNearBottom;
-                        const fragment = document.createDocumentFragment();
-                        const cachedColumns = columnOrder.filter(col => visibleColumns.includes(col));
-                        logsToAppend.forEach(log => fragment.appendChild(createLogRow(log, cachedColumns)));
-                        logTableBody.appendChild(fragment);
-
-                        // Bidirectional sliding window: after appending newer rows,
-                        // trim the oldest rows (head) from the opposite end.
-                        const rows = logTableBody.querySelectorAll('tr[data-log-id]');
-                        const excess = rows.length - HISTORY_DOM_LIMIT;
-                        if (excess > 0) {
-                            for (let i = 0; i < excess; i++) {
-                                if (rows[i]) rows[i].remove();
-                            }
-                        }
-
-                        if (autoScrollEnabled && wasNearBottom) {
-                            scrollToBottom();
-                        }
-                    }
-                }
+                finishDisplayUpdate();
+            } finally {
+                isRendering = false;
             }
+        }
 
+        function finishDisplayUpdate() {
             const allLogRows = logTableBody.querySelectorAll('tr[data-log-id]');
             if (allLogRows.length > 0) {
                 displayMinId = parseInt(allLogRows[0].dataset.logId, 10);
