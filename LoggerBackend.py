@@ -103,7 +103,11 @@ class LoggerBackend:
     def register_router(self, app: Flask, wrapper=None) -> bool:
         if not self.app:
             self.app = app
-            self.app.secret_key = os.urandom(24)  # Secret key for session management
+            # 挂载到宿主 Flask 时必须保留宿主的会话签名密钥。覆盖它会让此前
+            # 签发的登录 Cookie 在每次装配日志路由后全部失效，也会破坏多实例
+            # 会话互认；只有独立启动日志服务时才由本模块生成随机密钥。
+            if not self.app.secret_key:
+                self.app.secret_key = os.urandom(24)
             CORS(self.app)
             self._register_routes(wrapper)
             return True
