@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-logging-backend"
+version = "0.1.0"
+description = "Lightweight logging backend service"
+requires-python = ">=3.10"
+dependencies = [
+    # === 关键修改说明 ===
+    # 原需求是 Flask==2.3.3。
+    # 但因为主工程用的是 Flask 3.1.1，如果在同一个环境安装，
+    # 必须把这里的限制改为 >=2.3.3，否则 pip 会报版本冲突错误。
+    "Flask>=2.3.3",
+
+    "Flask-Cors>=4.0.0",
+    "python-json-logger>=2.0.7"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]  # 自动查找当前目录下的源码包
